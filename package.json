@@ -1,0 +1,35 @@
+{
+  "name": "@edemilorhea/code-mentor",
+  "version": "0.1.0",
+  "description": "把本機 git diff 轉成情境導向的 code 導讀（單檔離線 HTML + Markdown）",
+  "type": "module",
+  "bin": {
+    "code-mentor": "bin/code-mentor.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "templates",
+    "skill"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Edemilorhea/code-mentor.git"
+  },
+  "homepage": "https://github.com/Edemilorhea/code-mentor#readme",
+  "keywords": [
+    "git",
+    "diff",
+    "code-review",
+    "walkthrough",
+    "gitlab",
+    "merge-request",
+    "ai",
+    "skill"
+  ],
+  "author": "Edemilorhea"
+}
