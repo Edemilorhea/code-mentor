@@ -7,6 +7,24 @@ var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline' };
   if (w >= 640) document.documentElement.style.setProperty('--diff-width', w + 'px');
   setSplit(s >= 0.2 && s <= 0.8 ? s : 0.5, false);
 })();
+// ---- sidebar + theme toggles (saved per browser) ----
+(function () {
+  var root = document.documentElement;
+  var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  function apply() {
+    var theme = lsGet('dg.theme', sys) === 'light' ? 'light' : 'dark', off = lsGet('dg.toc', '') === 'off';
+    root.dataset.theme = theme; root.classList.toggle('toc-off', off);
+    var b = document.querySelector('[data-ui=theme]'); if (b) b.textContent = theme === 'light' ? '深色' : '淺色';
+    b = document.querySelector('[data-ui=toc]'); if (b) b.textContent = off ? '顯示側欄' : '收合側欄';
+  }
+  apply();
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-ui]'); if (!t) return;
+    if (t.dataset.ui === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
+    else lsSet('dg.toc', root.classList.contains('toc-off') ? '' : 'off');
+    apply();
+  });
+})();
 function setSplit(s, save) {
   var st = document.documentElement.style;
   st.setProperty('--split-n', String(s)); st.setProperty('--split', (s * 100) + '%');
