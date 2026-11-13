@@ -1,7 +1,7 @@
 // ---- persisted view state ----
 function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage may be blocked */ } }
-var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline' };
+var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full: false };
 (function () {
   var w = parseFloat(lsGet('dg.w', '')), s = parseFloat(lsGet('dg.split', ''));
   if (w >= 640) document.documentElement.style.setProperty('--diff-width', w + 'px');
@@ -85,13 +85,40 @@ function rowSbs(r, lang) {
   return out + '</tr>';
 }
 function hunkNoteFilter(ns, f, hk) { return ns.filter(function (n) { return n.hunk === hk.id || n.hunk === f.id || n.hunk === f.path; }); }
-function hunkHtml(f, hk, ns, mode, lang) {
+// ---- focus view: keep only rows near annotated lines, fold the rest ----
+var CTX = 3;
+function hasLineNotes(ns) { return ns.some(function (n) { return typeof n.line === 'number'; }); }
+function coreRanges(ns) {
+  var s = { o: [], n: [] };
+  ns.forEach(function (n) {
+    if (typeof n.line !== 'number') return;
+    var end = typeof n.to === 'number' && n.to > n.line ? n.to : n.line;
+    (n.side === 'old' ? s.o : s.n).push([n.line - CTX, end + CTX]);
+  });
+  return s;
+}
+function inRanges(v, rs) { if (v == null) return false; for (var i = 0; i < rs.length; i++) if (v >= rs[i][0] && v <= rs[i][1]) return true; return false; }
+function rowKept(r, cr) {
+  if (r.above.L.length || r.above.R.length || r.below.L.length || r.below.R.length) return true;
+  return inRanges(r.l && r.l.o, cr.o) || inRanges(r.r && r.r.n, cr.n);
+}
+// b: block (for unfolded state); focus: fold rows outside annotated ranges
+function hunkHtml(f, hk, ns, mode, lang, b, focus) {
   var rows = pairRows(hk, ns, mode), o = ['<tr class="h"><td colspan="4">' + h(hk.header) + '</td></tr>'];
-  rows.forEach(function (r) {
+  var cr = focus ? coreRanges(ns) : null, i = 0;
+  function emit(r) {
     o.push(mode === 'sbs' ? noteRowSbs(r.above.L, r.above.R) : noteRowInline(r.above.L.concat(r.above.R)));
     o.push(mode === 'sbs' ? rowSbs(r, lang) : rowInline(r, lang));
     o.push(mode === 'sbs' ? noteRowSbs(r.below.L, r.below.R) : noteRowInline(r.below.L.concat(r.below.R)));
-  });
+  }
+  while (i < rows.length) {
+    if (!cr || rowKept(rows[i], cr)) { emit(rows[i++]); continue; }
+    var j = i; while (j < rows.length && !rowKept(rows[j], cr)) j++;
+    var key = hk.id + ':' + i;
+    if (b._unfold[key]) rows.slice(i, j).forEach(emit);
+    else o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ 略過 ' + (j - i) + ' 行，點開</button></td></tr>');
+    i = j;
+  }
   return o.join('');
 }
 
@@ -152,25 +179,38 @@ function gapClick(b, btn) {
 
 // ---- block ----
 function modeOf(b) { return b._ov || VIEW.mode; }
+function fullOf(b) { return b._fv != null ? b._fv : VIEW.full; }
+function fvLabel(b) {
+  var f = byId[b.dataset.file];
+  return fullOf(b) ? '只看重點' : '看完整檔案' + (f.content || f.status === 'added' ? '' : '（僅 diff）');
+}
 function fillBlock(b, force) {
-  var mode = modeOf(b);
-  if (!force && b.dataset.done === '1' && b.dataset.rmode === mode) return;
-  var f = byId[b.dataset.file], hk = b.dataset.hunk ? hunkById[b.dataset.hunk][1] : null, hs = hk ? [hk] : f.hunks, lang = langOf(f.path), ns = b._notes || [], body = '';
+  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '');
+  if (!force && b.dataset.done === '1' && b.dataset.rmode === key) return;
+  var f = byId[b.dataset.file], hk = b.dataset.hunk && !full ? hunkById[b.dataset.hunk][1] : null, hs = hk ? [hk] : f.hunks, lang = langOf(f.path), ns = b._notes || [], body = '';
+  // a station's notes may target other files: only this file's own line notes switch on focus mode
+  var focus = !full && hasLineNotes(ns.filter(function (n) { var hb = hunkById[n.hunk]; return n.hunk === f.id || n.hunk === f.path || (hb && hb[0] === f); }));
   if (!hs.length) body = '<tr class="h"><td colspan="4">' + (f.binary ? '二進位檔' : '沒有內容變更（僅改名或權限）') + '</td></tr>';
   else {
-    var whole = !hk;
+    // full: whole file (all hunks + every gap line); focus: annotated rows only, no gap bars
+    var whole = !hk && !focus;
+    var gap = function (i) {
+      var g = gapInfo(f, hs, i); if (!g) return '';
+      return full ? ctxRows(g, g.start, g.end, f, mode, lang) : gapHtml(b, f, g, i, mode, lang);
+    };
     hs.forEach(function (x, i) {
-      if (whole) { var g = gapInfo(f, hs, i); if (g) body += gapHtml(b, f, g, i, mode, lang); }
-      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang);
+      if (whole) body += gap(i);
+      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang, b, focus);
     });
-    if (whole) { var gl = gapInfo(f, hs, hs.length); if (gl) body += gapHtml(b, f, gl, hs.length, mode, lang); }
+    if (whole) body += gap(hs.length);
   }
   var cg = mode === 'sbs' ? '<colgroup><col style="width:52px"><col class="cm"><col style="width:52px"><col></colgroup>' : '<colgroup><col style="width:52px"><col style="width:52px"><col style="width:20px"><col></colgroup>';
   var bd = b.querySelector('.bd');
   bd.innerHTML = '<table class="df ' + mode + '">' + cg + body + '</table>' + (mode === 'sbs' ? '<div class="sph" title="拖曳調整左右欄寬，雙擊還原"></div>' : '');
-  b.dataset.done = '1'; b.dataset.rmode = mode;
+  b.dataset.done = '1'; b.dataset.rmode = key;
   var tg = b.querySelector('.tg');
   tg.textContent = '顯示：' + (mode === 'sbs' ? '並排' : '單欄');
+  b.querySelector('.fv').textContent = fvLabel(b);
 }
 var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (es) {
   es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); if (e.target.dataset.open === '1') fillBlock(e.target); } });
@@ -179,23 +219,28 @@ var BLOCKS = [];
 function mkBlock(ref, notes, opts) {
   var r = resolve(ref); if (!r) return null;
   var f = r.file, g = (D.guideFiles || {})[f.path] || (G.files || {})[f.path] || {}, d = document.createElement('div');
-  d.className = 'blk'; d.dataset.file = f.id; d.dataset.hunk = r.hunk ? r.hunk.id : ''; d._notes = notes || []; d._gaps = {}; d._ov = null;
+  d.className = 'blk'; d.dataset.file = f.id; d.dataset.hunk = r.hunk ? r.hunk.id : ''; d._notes = notes || []; d._gaps = {}; d._ov = null; d._fv = null; d._unfold = {};
   var open = !(f.generated && !(opts && opts.forceOpen));
   d.dataset.open = open ? '1' : '0';
   var tags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '');
   d.innerHTML = '<div class="fh"><span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
-    + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="tg"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
+    + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
     + (f.generated && (g.explain || g.summary) ? '<div class="explain">' + (g.summary ? '<b>' + inl(g.summary) + '</b>' : '') + md(g.explain) + '</div>' : '')
     + '<div class="bd" style="position:relative"></div><div class="rz" title="拖曳調整所有 diff 寬度，雙擊還原"></div>';
   var fh = d.querySelector('.fh'), bd = d.querySelector('.bd'), fd = d.querySelector('.fd'), tg = d.querySelector('.tg');
   bd.style.display = open ? '' : 'none';
   tg.textContent = '顯示：' + (modeOf(d) === 'sbs' ? '並排' : '單欄');
+  var fv = d.querySelector('.fv'); fv.textContent = fvLabel(d);
+  fv.addEventListener('click', function () { d._fv = !fullOf(d); d._unfold = {}; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
   // lazy: hand rendering to the viewport observer (expand-all), instead of rendering now
   function setOpen(v, lazy) { d.dataset.open = v ? '1' : '0'; bd.style.display = v ? '' : 'none'; fd.textContent = v ? '收合' : '展開'; if (v) { if (lazy && io) io.observe(d); else fillBlock(d); } }
   d.setOpen = setOpen;
   fh.addEventListener('click', function (e) { var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return; setOpen(d.dataset.open !== '1'); });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
-  bd.addEventListener('click', function (e) { var bt = e.target.closest && e.target.closest('button[data-gap]'); if (bt) gapClick(d, bt); });
+  bd.addEventListener('click', function (e) {
+    var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold]'); if (!bt) return;
+    if (bt.dataset.fold) { d._unfold[bt.dataset.fold] = 1; fillBlock(d, true); } else gapClick(d, bt);
+  });
   if (open) { if (io) io.observe(d); else fillBlock(d); }
   BLOCKS.push(d);
   return d;
@@ -204,6 +249,14 @@ function mkBlock(ref, notes, opts) {
 function setGlobalMode(m) {
   VIEW.mode = m; lsSet('dg.mode', m);
   BLOCKS.forEach(function (b) { b._ov = null; if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') fillBlock(b, true); else if (b.querySelector('.tg')) b.querySelector('.tg').textContent = '顯示：' + (m === 'sbs' ? '並排' : '單欄'); });
+}
+// Global focus/full: clears per-block overrides; re-renders open blocks lazily as they scroll into view.
+function setGlobalFull(v) {
+  VIEW.full = v;
+  BLOCKS.forEach(function (b) {
+    b._fv = null; b._unfold = {}; b.querySelector('.fv').textContent = fvLabel(b);
+    if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') { b.dataset.done = '0'; if (io) io.observe(b); else fillBlock(b, true); }
+  });
 }
 
 // ---- drag: shared width, split ----

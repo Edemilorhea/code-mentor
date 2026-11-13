@@ -60,11 +60,12 @@ function head() {
   if (G.summary) s += '<div class="lead">' + inl(G.summary) + '</div>';
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
-  s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span><button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div></header>';
+  s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span><span class="seg" id="fseg"><button type="button" data-f="0">重點</button><button type="button" data-f="1">完整</button></span><button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div></header>';
   s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a></nav></div><div class="content" id="content"></div>';
   return s;
 }
-function syncSeg() { Array.prototype.forEach.call(document.querySelectorAll('#gseg button'), function (b) { b.setAttribute('aria-pressed', b.dataset.m === VIEW.mode ? 'true' : 'false'); }); }
+function syncSeg() { Array.prototype.forEach.call(document.querySelectorAll('#gseg button'), function (b) { b.setAttribute('aria-pressed', b.dataset.m === VIEW.mode ? 'true' : 'false'); });
+  Array.prototype.forEach.call(document.querySelectorAll('#fseg button'), function (b) { b.setAttribute('aria-pressed', (b.dataset.f === '1') === VIEW.full ? 'true' : 'false'); }); }
 function stationCard(u, nums, sc) {
   var s = u.s, d = document.createElement('section'), num = nums ? nums[s.id] : '';
   d.className = 'card'; d.id = (u.mech ? 'm-' : 's-') + s.id;
@@ -211,7 +212,7 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-all],#gseg button') : null; if (!t) return;
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-all],#gseg button,#fseg button') : null; if (!t) return;
   if (t.dataset.all) toggleAll(t.dataset.all === 'open');
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
   else if (t.dataset.jump) {
@@ -223,6 +224,12 @@ document.addEventListener('click', function (e) {
       else { var el = document.getElementById(id); if (el) el.scrollIntoView(); }
     }
   } else if (t.dataset.m) { setGlobalMode(t.dataset.m); syncSeg(); }
+  else if (t.dataset.f) {
+    var full = t.dataset.f === '1';
+    if (full === VIEW.full) return;
+    if (full && !window.confirm('所有已展開的區塊都會改成顯示完整檔案，長檔案會讓頁面變長、變慢。要繼續嗎？')) return;
+    setGlobalFull(full); syncSeg();
+  }
 });
 $main.innerHTML = head(); syncSeg();
 window.addEventListener('hashchange', render);
