@@ -294,3 +294,75 @@ function setGlobalFull(v) {
     else if (e.target.closest && e.target.closest('.sph')) { setSplit(0.5, true); }
   });
 })();
+
+// ---- floating toolbar: controls the block nearest the viewport's vertical center ----
+(function () {
+  var tb = document.getElementById('dtb'); if (!tb) return;
+  var cur = null, raf = 0;
+  function q(s) { return tb.querySelector(s); }
+  function midY() { return window.innerHeight / 2; }
+  function pick() {
+    var y = midY(), best = null, bd = Infinity;
+    BLOCKS.forEach(function (b) {
+      if (!b.isConnected || !b.offsetParent) return;
+      var r = b.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return;
+      var d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      if (d < bd) { bd = d; best = b; }
+    });
+    return best;
+  }
+  // nearest gap/fold row above (dir<0) or below (dir>0) the center line that still has something to expand
+  function gapRow(b, dir) {
+    if (!b || b.dataset.open !== '1') return null;
+    var y = midY(), rows = b.querySelectorAll('tr.gap'), hit = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].querySelector('button[data-fold],button[data-act=all]')) continue;
+      var r = rows[i].getBoundingClientRect(), c = r.top + r.height / 2;
+      if (dir < 0 && c < y) hit = rows[i];
+      if (dir > 0 && c >= y) return rows[i];
+    }
+    return hit;
+  }
+  function expand(dir, all) {
+    var row = gapRow(cur, dir); if (!row) return;
+    // GitLab convention: "up" reveals the lines nearest the following hunk, "down" those after the previous one
+    var acts = all ? ['all'] : dir < 0 ? ['up', 'down', 'all'] : ['down', 'up', 'all'], btn = row.querySelector('button[data-fold]');
+    for (var i = 0; !btn && i < acts.length; i++) btn = row.querySelector('button[data-act=' + acts[i] + ']');
+    if (!btn) return;
+    var h0 = cur.offsetHeight;
+    btn.click();
+    if (dir < 0) window.scrollBy(0, cur.offsetHeight - h0); // keep the line being read in place
+    update();
+  }
+  function update() {
+    raf = 0;
+    var b = pick();
+    if (b !== cur) { if (cur) cur.classList.remove('cur'); cur = b; if (cur) cur.classList.add('cur'); }
+    tb.hidden = !cur; if (!cur) return;
+    var f = byId[cur.dataset.file], open = cur.dataset.open === '1';
+    q('.nm').textContent = f.path; q('.nm').title = f.path;
+    q('[data-tb=open]').textContent = open ? '收合檔案' : '展開檔案';
+    q('[data-tb=mode]').textContent = modeOf(cur) === 'sbs' ? '改單欄' : '改並排';
+    q('[data-tb=full]').textContent = fullOf(cur) ? '只看重點' : '看完整';
+    var up = !!gapRow(cur, -1), dn = !!gapRow(cur, 1);
+    q('[data-tb=u20]').disabled = q('[data-tb=uall]').disabled = !up;
+    q('[data-tb=d20]').disabled = q('[data-tb=dall]').disabled = !dn;
+    q('[data-tb=mode]').disabled = q('[data-tb=full]').disabled = false;
+  }
+  function later() { if (!raf) raf = requestAnimationFrame(update); }
+  tb.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-tb]'); if (!t || !cur) return;
+    var a = t.dataset.tb;
+    if (a === 'open') cur.setOpen(cur.dataset.open !== '1');
+    else if (a === 'mode') cur.querySelector('.tg').click();
+    else if (a === 'full') cur.querySelector('.fv').click();
+    else if (a === 'u20' || a === 'uall') return expand(-1, a === 'uall');
+    else if (a === 'd20' || a === 'dall') return expand(1, a === 'dall');
+    update();
+  });
+  window.addEventListener('scroll', later, { passive: true });
+  window.addEventListener('resize', later);
+  window.addEventListener('hashchange', function () { setTimeout(later, 50); });
+  document.addEventListener('click', function () { setTimeout(later, 0); });
+  setTimeout(later, 100);
+})();
