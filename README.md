@@ -28,15 +28,31 @@ Diff 的功能：
 
 前提：已安裝 [Node.js](https://nodejs.org/) 18 以上和 git。
 
+每台機器裝一次就好，所有專案共用，不必每個專案重裝。
+
 ```bash
 # 1. 安裝工具
 npm i -g @edemilorhea/code-mentor
 
 # 2. 把 skill 裝給 AI（裝到 ~/.agents/skills/code-mentor）
 code-mentor skill install
+
+# 3.（選用，OpenCode）安裝 code-mentor primary agent
+code-mentor agent install
 ```
 
-裝完記得**重開 AI 工具**（例如 OpenCode），它才會讀到新的 skill。
+裝完記得**重開 AI 工具**（例如 OpenCode），它才會讀到新的 skill 和 agent。
+
+確認裝到新版：`code-mentor help` 的用法裡要有 `agent install`。
+
+| 裝了什麼 | 位置 | 範圍 |
+|---|---|---|
+| CLI | 全域 node_modules | 這台機器所有專案 |
+| skill | `~/.agents/skills/code-mentor` | 這台機器所有專案 |
+| agent | `~/.config/opencode/agent/code-mentor.md` | 這台機器所有專案 |
+| 產出 | 每個 repo 的 `.code-mentor/` | 只有那個 repo，自動被 git 忽略 |
+
+用 `--project` 裝的 skill／agent 只在該專案生效，而且會蓋過全域那份；升級時要在該專案重跑一次。
 
 其他安裝方式：
 
@@ -67,14 +83,36 @@ code-mentor skill install --project
 - `code_mentor` 工具：`collect`、`show`、`check`、`build`。AI 直接呼叫，不必另外裝 CLI。
 - `/code-mentor` 指令：例如 `/code-mentor 導讀 MR !123`。它會先偵測本機有沒有 `implementation-understanding-tutor`、`change-understanding-review`、`diagram-design`，有的話用它們決定怎麼講，沒有就用內建規則。
 
-想要專門的導讀模式，再裝 primary agent（只能寫 `.code-mentor/` 底下的檔案）：
+想要專門的導讀模式，再裝 primary agent。npm 套件無法自動新增 agent，所以要手動跑一次：
 
 ```bash
 code-mentor agent install            # 裝到 ~/.config/opencode/agent/code-mentor.md
 code-mentor agent install --project  # 裝到 ./.opencode/agent/code-mentor.md
 ```
 
+重開 OpenCode 後按 Tab 切到 `code-mentor`。這個 agent 只能寫 `.code-mentor/` 底下的檔案，不改程式、不 commit、不 push、不切分支；判斷不出比較基準時會停下來問你，不會自己猜。
+
 不用 OpenCode 的話，照上面的 CLI 加 skill 方式用就好，兩種可以並存。
+
+### 講解內容由誰決定（內容大腦）
+
+code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。「怎麼理解、怎麼講」依本機有哪些 skill 決定：
+
+| 本機有的 skill | 誰當大腦 |
+|---|---|
+| `implementation-understanding-tutor` | tutor 決定情境、站的順序與逐段講法；有 `change-understanding-review` 時一併用它分組與判斷 Added／Modified／Removed |
+| 只有 `change-understanding-review` | review 負責分組與判斷，逐段講法用內建規則 |
+| 兩個都沒有 | 內建規則（`SKILL.md` 第 5 節），講解深度要求不變 |
+
+有 `diagram-design` 時，只在你要架構圖、sequence 圖，或機制用文字講不清楚時才用它畫圖，存在 `.code-mentor/out/diagrams/`。
+
+兩邊規則衝突時：格式、覆蓋、輸出位置聽 code-mentor；內容怎麼講聽大腦。
+
+| 你要的 | 用哪個 |
+|---|---|
+| 整個分支／MR／diff，每個檔案都要講到 | code-mentor |
+| 一個功能或 method 的故事頁 | `explain-with-code-walkthrough` |
+| 單張圖 | `diagram-design`，嵌進上面任一種 |
 
 ## 最快的用法：叫 AI 做
 
@@ -166,13 +204,29 @@ code-mentor build            # 5. 產生 .code-mentor/out/index.html 和 guide.m
 
 **HTML 很大**：大檔和產生檔預設收合，點開才渲染。
 
+**`@latest` 裝到舊版**：npm 的版本清單會快取最多 5 分鐘（registry 回傳 `Cache-Control: max-age=300`）。剛發布時可指定版本 `npm i -g @edemilorhea/code-mentor@<版本>`，或加 `--prefer-online`。
+
+**裝了新版，`code-mentor help` 還是舊的**：PATH 上可能有別處的舊版（例如 Bun 或其他 Node 版本）。用 `npm ls -g @edemilorhea/code-mentor` 看 npm 裝的版本，`Get-Command code-mentor -All`（PowerShell）或 `which -a code-mentor` 看實際執行的是哪一個。
+
+**看不到 code-mentor agent**：agent 不會隨 `npm i` 安裝，要跑 `code-mentor agent install` 再重開 OpenCode。
+
 ## 更新與移除
 
 ```bash
-npm i -g @edemilorhea/code-mentor@latest && code-mentor skill install   # 更新
-npm rm -g @edemilorhea/code-mentor                                     # 移除工具
+# 更新（每台機器一次）
+npm i -g @edemilorhea/code-mentor@latest
+code-mentor skill install
+code-mentor agent install
+
+npm rm -g @edemilorhea/code-mentor   # 移除工具
 # skill、agent 要手動刪掉：~/.agents/skills/code-mentor、~/.config/opencode/agent/code-mentor.md
 ```
+
+## 規劃中
+
+- 用 `diagram-design` 產生架構圖、sequence 圖並嵌進報告。
+- `serve` 模式：本機開服務即時預覽，改 `guide.json` 自動重建。
+- 排除已 commit 但不想導讀的路徑（例如文件、產出檔），不必寫進 `.gitignore`。
 
 ## 開發
 
@@ -180,6 +234,8 @@ npm rm -g @edemilorhea/code-mentor                                     # 移除�
 node lib/sbs.mjs --selftest   # 並排配對與註解放置的自我檢查
 npm i -g .                    # 從原始碼安裝
 ```
+
+結構：`lib/run.mjs` 是四個指令的主體，CLI（`bin/`）和 OpenCode plugin（`plugin/index.mjs`）共用。本機測 plugin 可在 `opencode.json` 用 `{ "package": "<repo 絕對路徑>" }` 載入。
 
 ## License
 
