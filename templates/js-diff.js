@@ -16,11 +16,16 @@ var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full
     root.dataset.theme = theme; root.classList.toggle('toc-off', off);
     var b = document.querySelector('[data-ui=theme]'); if (b) b.textContent = theme === 'light' ? '深色' : '淺色';
     b = document.querySelector('[data-ui=toc]'); if (b) b.textContent = off ? '顯示側欄' : '收合側欄';
+    var fs = codeFs(); root.style.setProperty('--fs-code', fs + 'px');
+    b = document.querySelector('[data-ui=fsv]'); if (b) b.textContent = fs + 'px';
   }
+  function codeFs() { var v = parseFloat(lsGet('dg.codefs', '')); return v >= 10 && v <= 24 ? v : 14; }
   apply();
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-ui]'); if (!t) return;
-    if (t.dataset.ui === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
+    var u = t.dataset.ui;
+    if (u === 'fs-' || u === 'fs+' || u === 'fsv') lsSet('dg.codefs', u === 'fsv' ? '' : String(Math.min(24, Math.max(10, codeFs() + (u === 'fs+' ? 1 : -1)))));
+    else if (u === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
     else lsSet('dg.toc', root.classList.contains('toc-off') ? '' : 'off');
     apply();
   });

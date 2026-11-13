@@ -106,19 +106,44 @@ function viewMech() {
   if (!c.childNodes.length) { var e = document.createElement('p'); e.className = 'empty'; e.textContent = '沒有機制／架構說明。'; c.appendChild(e); }
   return { node: c, toc: toc };
 }
-var FSORT = lsGet('dg.fsort', 'path');
+var FSORT = lsGet('dg.fsort', 'kind');
+var KINDS = ['前端', '後端', '資料庫', '其他'];
+function globRe(g) { return new RegExp('^' + g.toLowerCase().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\u0001/g, '.*') + '$'); }
+var KIND_RULES = [];
+Object.keys(G.kinds || {}).forEach(function (k) { if (KINDS.indexOf(k) >= 0) (G.kinds[k] || []).forEach(function (g) { KIND_RULES.push([globRe(g), k]); }); });
+var KCACHE = {};
+function kindOf(p) { return KCACHE[p] || (KCACHE[p] = kindOf0(p)); }
+// order: files[path].kind > guide.kinds globs > built-in path/extension guess
+function kindOf0(p) {
+  var fk = ((G.files || {})[p] || {}).kind; if (KINDS.indexOf(fk) >= 0) return fk;
+  var lp = p.toLowerCase(), ext = lp.slice(lp.lastIndexOf('.') + 1);
+  for (var i = 0; i < KIND_RULES.length; i++) if (KIND_RULES[i][0].test(lp)) return KIND_RULES[i][1];
+  if (/(^|\/)migrations?\//.test(lp) || /modelsnapshot|dbcontext/.test(lp) || /^(sql|edmx|dbml|prisma)$/.test(ext) || /(^|\/)prisma\//.test(lp)) return '資料庫';
+  if (/^(js|mjs|cjs|ts)$/.test(ext) && /(^|\/)(server|backend|api|routes|controllers|middlewares?|functions)\//.test(lp)) return '後端';
+  if (/^(js|jsx|mjs|cjs|ts|tsx|vue|svelte|css|scss|sass|less|html|htm|cshtml|razor|svg|png|jpe?g|gif|ico|woff2?)$/.test(ext)) return '前端';
+  if (/^(cs|vb|fs|csproj|sln|java|kt|scala|go|py|php|rb|rs|c|cpp|h)$/.test(ext)) return '後端';
+  return '其他';
+}
+function dirOf(p) { return p.indexOf('/') >= 0 ? p.slice(0, p.lastIndexOf('/')) : '(root)'; }
 function viewFiles() {
   var c = document.createDocumentFragment(), toc = '';
   FWRAPS.length = 0;
   var tools = document.createElement('div'); tools.className = 'tools';
-  tools.innerHTML = '排序：<select id="fsort"><option value="path">依路徑</option><option value="size">依大小</option></select>';
+  tools.innerHTML = '排序：<select id="fsort"><option value="kind">依類別</option><option value="path">依路徑</option><option value="size">依大小</option></select>';
   c.appendChild(tools);
   var list = files.slice();
+  var key = function (f) { return (FSORT === 'kind' ? KINDS.indexOf(kindOf(f.path)) + '\u0000' : '') + dirOf(f.path) + '\u0000' + f.path; };
   if (FSORT === 'size') list.sort(function (a, b) { return (b.additions + b.deletions) - (a.additions + a.deletions); });
-  else list.sort(function (a, b) { return a.path < b.path ? -1 : 1; });
-  var max = Math.max.apply(null, [1].concat(files.map(function (f) { return f.additions + f.deletions; }))), lastDir = null;
+  else list.sort(function (a, b) { return key(a) < key(b) ? -1 : 1; }); // sort by dir first so each group stays contiguous
+  var max = Math.max.apply(null, [1].concat(files.map(function (f) { return f.additions + f.deletions; }))), lastDir = null, lastKind = null;
   list.forEach(function (f) {
-    var dir = FSORT === 'size' ? null : (f.path.indexOf('/') >= 0 ? f.path.slice(0, f.path.lastIndexOf('/')) : '(root)');
+    if (FSORT === 'kind' && kindOf(f.path) !== lastKind) {
+      lastKind = kindOf(f.path); lastDir = null;
+      var n = list.filter(function (x) { return kindOf(x.path) === lastKind; }).length;
+      var kh = document.createElement('h3'); kh.className = 'kind'; kh.textContent = lastKind + '（' + n + '）'; c.appendChild(kh);
+      toc += '<div class="grp kind">' + h(lastKind) + '（' + n + '）</div>';
+    }
+    var dir = FSORT === 'size' ? null : dirOf(f.path);
     if (dir !== null && dir !== lastDir) {
       var dh = document.createElement('div'); dh.className = 'dir'; dh.textContent = dir; c.appendChild(dh); lastDir = dir;
       toc += '<div class="grp" title="' + h(dir) + '">' + h(dir.split('/').slice(-2).join('/')) + '</div>';

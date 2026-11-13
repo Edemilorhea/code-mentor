@@ -132,8 +132,10 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
       "edges": [{ "from": "a", "to": "b", "label": "上傳", "dashed": false }]
     }
   }],
+  "kinds": { "後端": ["src/server/**", "apps/api/**"], "前端": ["ClientApp/**"] },
   "files": {
     "path/to/file": {
+      "kind": "前端|後端|資料庫|其他",
       "summary": "", "explain": "", "skip": "略過原因", "skipHunks": ["f3#4"],
       "mapping": [{ "from": "f5#1:20", "to": "f9#1:14", "text": "Entity 這行產生 migration 那行" }]
     }
@@ -151,6 +153,7 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
   - `to`（選填）：結束行（同一側）。形成**範圍註解**：範圍左側有色條，說明框放在範圍第一行上方，標題 `L47–L62`。
   - `step`（選填）：數字，顯示成編號圓章。用來把一個方法依序一段一段講。
   - `see`（選填）：`"<hunkId|fileId>:<行號>"`，產生可點的交叉參照，跳到「依檔案」分頁該行。
+- 「依檔案」分頁把檔案分成 前端／後端／資料庫／其他。優先順序：`files[path].kind` > `kinds`（glob，`**` 跨目錄、`*` 單層）> 工具依副檔名與路徑猜。工具只看副檔名，分不出 Node／monorepo 的 `.js`／`.ts`。專案的 `.js`／`.ts` 同時有前後端時（看 `package.json` 依賴：`express`、`@nestjs/*`、`fastify` 是後端，`react`、`vue`、`@angular/*` 是前端；也看目錄結構），**必須**填 `kinds`。少數例外檔再用 `files[path].kind`。
 - `files[path].mapping`：Entity 設定行 ↔ Migration 語法行的對照，`from`／`to` 格式同 `see`。
 - `check` 會驗證：`to` ≥ `line` 且兩端在 hunk 內；`see`／`mapping` 的目標存在。
 
