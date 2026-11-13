@@ -31,19 +31,14 @@ Diff 的功能：
 每台機器裝一次就好，所有專案共用，不必每個專案重裝。
 
 ```bash
-# 1. 安裝工具
 npm i -g @edemilorhea/code-mentor
-
-# 2. 把 skill 裝給 AI（裝到 ~/.agents/skills/code-mentor）
-code-mentor skill install
-
-# 3.（選用，OpenCode）安裝 code-mentor primary agent
-code-mentor agent install
 ```
 
-裝完記得**重開 AI 工具**（例如 OpenCode），它才會讀到新的 skill 和 agent。
+全域安裝時會自動把 skill 裝到 `~/.agents/skills/code-mentor`、agent 裝到 `~/.config/opencode/agent/code-mentor.md`（從 0.1.106 起）。裝完記得**重開 AI 工具**（例如 OpenCode），它才會讀到新的 skill 和 agent。
 
-確認裝到新版：`code-mentor help` 的用法裡要有 `agent install`。
+自動安裝沒跑時（例如 npm 設了 `ignore-scripts=true`），手動補一次：`code-mentor setup`。不想自動寫入家目錄，安裝前設環境變數 `CODE_MENTOR_SKIP_SETUP=1`。
+
+確認裝到新版：`code-mentor help` 的用法裡要有 `setup`。
 
 | 裝了什麼 | 位置 | 範圍 |
 |---|---|---|
@@ -208,15 +203,13 @@ code-mentor build            # 5. 產生 .code-mentor/out/index.html 和 guide.m
 
 **裝了新版，`code-mentor help` 還是舊的**：PATH 上可能有別處的舊版（例如 Bun 或其他 Node 版本）。用 `npm ls -g @edemilorhea/code-mentor` 看 npm 裝的版本，`Get-Command code-mentor -All`（PowerShell）或 `which -a code-mentor` 看實際執行的是哪一個。
 
-**看不到 code-mentor agent**：agent 不會隨 `npm i` 安裝，要跑 `code-mentor agent install` 再重開 OpenCode。
+**看不到 code-mentor agent**：先重開 OpenCode；還是沒有就跑 `code-mentor setup` 再重開（npm 的 `ignore-scripts` 會擋掉自動安裝）。
 
 ## 更新與移除
 
 ```bash
-# 更新（每台機器一次）
+# 更新（每台機器一次；skill 和 agent 會自動一起更新）
 npm i -g @edemilorhea/code-mentor@latest
-code-mentor skill install
-code-mentor agent install
 
 npm rm -g @edemilorhea/code-mentor   # 移除工具
 # skill、agent 要手動刪掉：~/.agents/skills/code-mentor、~/.config/opencode/agent/code-mentor.md

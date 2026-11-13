@@ -11,6 +11,9 @@
   "bin": {
     "code-mentor": "bin/code-mentor.mjs"
   },
+  "scripts": {
+    "postinstall": "node lib/postinstall.mjs"
+  },
   "files": [
     "bin",
     "lib",
