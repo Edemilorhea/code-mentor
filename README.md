@@ -53,6 +53,29 @@ code-mentor skill install --project
 
 用 Bun 也可以：`bun add -g @edemilorhea/code-mentor`，或 `bunx @edemilorhea/code-mentor help`。
 
+### 當 OpenCode V2 plugin 用
+
+同一個套件也是 OpenCode V2 plugin。在 `opencode.json` 加：
+
+```json
+{ "plugins": [{ "package": "@edemilorhea/code-mentor" }] }
+```
+
+重開 OpenCode 後會多出：
+
+- `code-mentor` skill（你已用 `skill install` 裝過時，以你裝的為準）。
+- `code_mentor` 工具：`collect`、`show`、`check`、`build`。AI 直接呼叫，不必另外裝 CLI。
+- `/code-mentor` 指令：例如 `/code-mentor 導讀 MR !123`。它會先偵測本機有沒有 `implementation-understanding-tutor`、`change-understanding-review`、`diagram-design`，有的話用它們決定怎麼講，沒有就用內建規則。
+
+想要專門的導讀模式，再裝 primary agent（只能寫 `.code-mentor/` 底下的檔案）：
+
+```bash
+code-mentor agent install            # 裝到 ~/.config/opencode/agent/code-mentor.md
+code-mentor agent install --project  # 裝到 ./.opencode/agent/code-mentor.md
+```
+
+不用 OpenCode 的話，照上面的 CLI 加 skill 方式用就好，兩種可以並存。
+
 ## 最快的用法：叫 AI 做
 
 在要導讀的 repo 裡，對 AI 說：
@@ -148,7 +171,7 @@ code-mentor build            # 5. 產生 .code-mentor/out/index.html 和 guide.m
 ```bash
 npm i -g @edemilorhea/code-mentor@latest && code-mentor skill install   # 更新
 npm rm -g @edemilorhea/code-mentor                                     # 移除工具
-# skill 要手動刪掉：~/.agents/skills/code-mentor
+# skill、agent 要手動刪掉：~/.agents/skills/code-mentor、~/.config/opencode/agent/code-mentor.md
 ```
 
 ## 開發

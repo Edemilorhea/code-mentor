@@ -8,9 +8,64 @@ description: 把本機 git 分支／修改／MR 的 diff 做成情境導向的 c
 你只負責寫 `guide.json`（說明、情境站、哪些 hunk 屬於哪裡、行註解、圖）。
 真正的 diff、GitLab 風格渲染、「每個檔案都被涵蓋」的檢查都由 `code-mentor` 工具負責。
 
+## 0. 內容大腦：先決定誰負責「怎麼理解、怎麼講」
+
+code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由「內容大腦」決定。開始前依下表選**一條**路徑，並在第一則回覆用一行告訴使用者選了哪條。
+
+### 怎麼知道有沒有某個 skill
+
+1. 由 `/code-mentor` 指令啟動時，提示裡有「本機偵測到的 skill」清單。**以那份清單為準**，不要再自己猜或搜尋檔案系統。
+2. 沒有清單時，只看你目前可用的 skill 列表（系統提供的 available skills）。列表裡沒有 = 沒有。不要去磁碟上找 SKILL.md。
+
+### 路徑
+
+| 偵測結果 | 路徑 | 做法 |
+|---|---|---|
+| 有 `implementation-understanding-tutor` | **A：tutor 當大腦** | 見下方 A |
+| 沒有 tutor，有 `change-understanding-review` | **B：review 當大腦** | 見下方 B |
+| 兩個都沒有 | **C：內建規則** | 只用本 skill 第 5 節 |
+
+`diagram-design` 不是大腦，它只影響圖（見下方 D），可以和 A、B、C 任一條並用。
+
+### A：tutor 當大腦
+
+1. 載入 `implementation-understanding-tutor`。它規定的 quality contract、code-teach contract 需要時一併載入。
+2. 用 tutor 的規則決定：主線情境、站的順序、每站的「為了什麼」情境句、每段程式的講法（責任 → 輸入 → 結果 → 交給誰 → 下游影響）。
+3. 有 `change-understanding-review` 時也載入它，只用它的 Added／Modified／Removed 判斷與「依需求意圖分組」，填進 `change` 與站的分組。
+4. tutor 的以下部分**不適用**，不要照做：
+   - guided 模式的「一次一站、等使用者說下一站」：code-mentor 一次產出整份 HTML。
+   - 「每輪閱讀預算」（一輪最多 1 張圖、3 段程式）：改用本 skill 的「一站只回答一個問題」。
+   - tutor 的「Optional: HTML walkthrough」與 `explain-with-code-walkthrough`：輸出一律是 code-mentor 的 `guide.json` → `build`。
+   - tutor 的輸出路徑 `$TEMP/opencode/walkthrough/`：輸出一律在 `.code-mentor/out/`。
+5. 兩邊衝突時：**格式、覆蓋、輸出位置聽 code-mentor；內容怎麼講聽 tutor。**
+6. 把 tutor 的結果對應到 `guide.json`：情境句 → `situation`／`purpose`／`did`；逐段講解 → 帶 `step` 與 `to` 的 notes；需要先懂的機制 → 子站或 `mechanisms`。
+
+### B：review 當大腦
+
+1. 載入 `change-understanding-review`。
+2. 用它把變更依需求意圖分組，判斷每組 Added／Modified／Removed，找出實際程式範圍。分組 → 情境站，判斷 → `change`，範圍 → `hunks`。
+3. 「怎麼逐段講」用本 skill 第 5 節的規則。
+4. 它是講解變更的 skill，不是 code review。不要寫正確性、安全性評分或核准意見。
+
+### C：內建規則
+
+只用本 skill 第 5 節。不要因為沒有 tutor 就降低講解深度：第 5 節的 `what`／`how`／`why`／`syntax` 要求照樣適用。
+
+### D：圖
+
+- 有 `diagram-design`：只在使用者要求「架構圖」「sequence 圖」或一站的機制用文字講不清楚時，才用它畫圖。把畫好的單檔 HTML 存在 `.code-mentor/out/diagrams/`，在該站的 callout 裡寫相對路徑連結。不要把它的 HTML 貼進 `guide.json`。
+- 沒有 `diagram-design`：用 `guide.json` 的 `mechanisms[].diagram`（flow／state）。migration 的資料表圖由工具自動產生，不必另畫。
+
+### 不論哪條路徑都不能違反
+
+- 每個變更檔都要被涵蓋，`check` 要 0 錯誤。
+- 不要自己用 shell 讀整份 `diff.json`。看 diff 用 `show`。
+- 沒有證據的意圖寫「推測：」，不確定就寫「不確定」。
+
 ## 1. 準備
 
-- 先試 `code-mentor help`。找不到指令時用 `npx -y @edemilorhea/code-mentor <子指令>`，或 `npm i -g @edemilorhea/code-mentor`。
+- 在 OpenCode 裡且有 `code_mentor` 工具（`collect`、`show`、`check`、`build`）時，**一律用工具**，不要用 shell 跑 CLI。以下說的 `code-mentor collect` 等指令，在工具模式下對應同名工具，參數名稱相同（`--no-worktree` → `noWorktree`、`--include-ignored` → `includeIgnored`、`--keep-cr` → `keepCr`）。
+- 沒有工具時，先試 `code-mentor help`。找不到指令時用 `npx -y @edemilorhea/code-mentor <子指令>`，或 `npm i -g @edemilorhea/code-mentor`。
 - 套件還沒發佈時：`npm i -g <套件資料夾路徑>`。
 - 工作目錄是目前 repo 的 `.code-mentor/`（工具會自動加 `.gitignore`）。
 

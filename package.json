@@ -1,8 +1,13 @@
 {
   "name": "@edemilorhea/code-mentor",
-  "version": "0.1.101",
+  "version": "0.1.102",
   "description": "把本機 git diff 轉成情境導向的 code 導讀（單檔離線 HTML + Markdown）",
   "type": "module",
+  "main": "plugin/index.mjs",
+  "exports": {
+    ".": "./plugin/index.mjs",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "code-mentor": "bin/code-mentor.mjs"
   },
@@ -10,7 +15,9 @@
     "bin",
     "lib",
     "templates",
-    "skill"
+    "skill",
+    "plugin",
+    "agent"
   ],
   "engines": {
     "node": ">=18"
@@ -29,7 +36,9 @@
     "gitlab",
     "merge-request",
     "ai",
-    "skill"
+    "skill",
+    "opencode",
+    "opencode-plugin"
   ],
   "author": "Edemilorhea"
 }

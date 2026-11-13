@@ -3,12 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collect, table, loadWork, show, WORK } from '../lib/collect.mjs';
-import { check, report } from '../lib/check.mjs';
-import { buildHtml } from '../lib/build-html.mjs';
-import { buildMd } from '../lib/build-md.mjs';
+import { runCollect, runShow, runCheck, runBuild } from '../lib/run.mjs';
 
 const SKILL = fileURLToPath(new URL('../skill/code-mentor', import.meta.url));
+const AGENT = fileURLToPath(new URL('../agent/code-mentor.md', import.meta.url));
+function emit(r) { console.log(r.text); if (!r.ok) process.exitCode = 1; }
 const USAGE = `code-mentor — 把 git diff 轉成情境導向的 code 導讀
 
 用法：
@@ -18,6 +17,8 @@ const USAGE = `code-mentor — 把 git diff 轉成情境導向的 code 導讀
   code-mentor build [--out <dir>] [--force]
   code-mentor skill install [--project]
   code-mentor skill path
+  code-mentor agent install [--project]
+  code-mentor agent path
   code-mentor help`;
 
 const BOOL = new Set(['no-worktree', 'keep-cr', 'include-ignored', 'force', 'project']);
@@ -38,41 +39,17 @@ function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { pos, opts } = parseArgs(rest);
   switch (cmd) {
-    case 'collect': {
-      const { diff, dir, created } = collect(opts);
-      console.log(`基準 ${diff.base}　merge-base ${diff.baseline} → ${diff.target}　${diff.files.length} 個檔案${diff.source?.mr ? `　MR !${diff.source.mr.iid} ${diff.source.mr.title || ''}` : ''}\n`);
-      console.log(table(diff));
-      if (diff.ignored.length > 0) {
-        console.log(`\n已排除 ${diff.ignored.length} 個符合 .gitignore 的檔案（加 --include-ignored 可保留）：`);
-        for (const p of diff.ignored.slice(0, 10)) console.log(p);
-        if (diff.ignored.length > 10) console.log(`…還有 ${diff.ignored.length - 10} 個`);
-      }
-      console.log(`\n已寫入 ${path.join(dir, 'diff.json')}${created ? `；已建立 guide.json 骨架` : '；guide.json 已存在，未覆蓋（新檔請自行補進 files）'}`);
-      break;
-    }
-    case 'show': {
-      if (!pos[0]) throw new Error('用法：code-mentor show <fileId|hunkId|path>');
-      console.log(show(loadWork().diff, pos[0]));
-      break;
-    }
-    case 'check': {
-      const { diff, guide } = loadWork();
-      const r = check(diff, guide);
-      console.log(report(r));
-      if (r.errors.length) process.exitCode = 1;
-      break;
-    }
-    case 'build': {
-      const { diff, guide } = loadWork();
-      const r = check(diff, guide);
-      if (r.errors.length || r.warnings.length) console.log(report(r));
-      if (r.errors.length && !opts.force) { console.error('check 有錯誤，中止 build（可用 --force 強制）'); process.exitCode = 1; break; }
-      const out = path.resolve(opts.out || path.join(WORK, 'out'));
-      fs.mkdirSync(out, { recursive: true });
-      fs.writeFileSync(path.join(out, 'index.html'), buildHtml(diff, guide));
-      fs.writeFileSync(path.join(out, 'guide.md'), buildMd(diff, guide));
-      console.log(path.join(out, 'index.html'));
-      console.log(path.join(out, 'guide.md'));
+    case 'collect': emit(runCollect(opts, process.cwd())); break;
+    case 'show': emit(runShow(pos[0], process.cwd())); break;
+    case 'check': emit(runCheck(process.cwd())); break;
+    case 'build': emit(runBuild(opts, process.cwd())); break;
+    case 'agent': {
+      if (pos[0] === 'path') { console.log(AGENT); break; }
+      if (pos[0] !== 'install') throw new Error('用法：code-mentor agent install [--project] | agent path');
+      const dest = opts.project ? path.resolve('.opencode/agent/code-mentor.md') : path.join(os.homedir(), '.config/opencode/agent/code-mentor.md');
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(AGENT, dest);
+      console.log(dest);
       break;
     }
     case 'skill': {
