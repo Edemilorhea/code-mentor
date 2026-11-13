@@ -15,10 +15,13 @@
 | 機制／架構 | 流程圖、狀態圖，以及從 EF Core migration 推出的資料表變更（ER 圖） |
 
 Diff 的功能：
-- 語法上色、行內字詞差異、可展開上下文。
+- 語法上色、行內字詞差異。
+- 上下文一次展開 20 行，也能一次收回 20 行，或整段收合。
+- 「全部收合／全部展開」一次處理所有檔案區塊。全部展開前一定會先問你，並告訴你會打開幾個檔案、幾行變更。
 - 單欄和並排可以全部一起切，也可以單獨切某一塊。
 - 所有 diff 寬度統一，拖曳右緣可一起調整，雙擊還原；並排時中間的分隔線也能拖。
 - 註解直接掛在那一行下面，支援範圍註解（`L47–L62`）、步驟編號、跨檔案跳轉。
+- 註解分種類：改了什麼、怎麼改、為什麼、語法／用法，另有做得好、風險、錯誤。
 - Migration 這類產生檔一定附白話語法說明，還有「Entity 設定 ↔ migration 語法」的對照。
 
 ## 第一次安裝
@@ -68,14 +71,17 @@ AI 會依序做這些事：比對修改 → 讀 diff → 寫講解 → 檢查到
 
 | 你要看的 | 指令 |
 |---|---|
-| 目前分支 vs 主分支（預設，含未 commit 的修改） | `code-mentor collect` |
+| 目前分支 vs 建立時的基準分支（預設，含未 commit 的修改） | `code-mentor collect` |
 | 只看已 commit 的部分 | `code-mentor collect --no-worktree` |
 | 某個 MR／PR | `code-mentor collect --mr 123` |
 | MR 在別的 remote，或要指定目標分支 | `code-mentor collect --mr 123 --remote upstream --target release/1.0` |
 | 指定另一個 base 分支 | `code-mentor collect --base origin/release` |
 | 兩個 ref 之間 | `code-mentor collect --range v1.0..v1.1` |
+| 連 `.gitignore` 忽略的檔案也要看 | `code-mentor collect --include-ignored` |
 
-主分支會依序自動找：`origin/HEAD`，然後 `main`、`master`、`develop`（本機的，再來是 `origin/` 的）。
+符合 `.gitignore` 的檔案預設不進導讀，就算它已經被 git 追蹤。`collect` 會印出排除了哪些，報告標頭也會顯示數量。
+
+分支模式會從本機 reflog 讀取目前分支建立時的基準，避免把預設分支（例如 `main`）誤當成實際基準。`--base <ref>` 可明確覆寫。若 reflog 證據不存在、已過期或有歧義，工具會停止並要求指定 `--base`，不會猜測。
 
 MR 模式會用 `git fetch` 抓 GitLab 的 `merge-requests/<iid>/head`，抓不到再試 GitHub 的 `pull/<iid>/head`。有裝 [`glab`](https://gitlab.com/gitlab-org/cli) 或 [`gh`](https://cli.github.com/) 時，會順便讀 MR 的標題、描述和目標分支。
 
@@ -96,6 +102,8 @@ code-mentor build            # 5. 產生 .code-mentor/out/index.html 和 guide.m
 - 產生檔或大修改沒寫摘要。
 - 產生檔沒寫白話的語法說明。
 - 註解指到的行號不在那段 diff 裡。
+
+`check` 另外會警告（不擋 build）：某一站有程式變更卻沒有任何註解，或一站塞了超過 6 個區塊。
 
 ## guide.json 範例
 
@@ -129,7 +137,7 @@ code-mentor build            # 5. 產生 .code-mentor/out/index.html 和 guide.m
 
 ## 常見問題
 
-**找不到主分支／你在主分支上**：用 `--base <分支>` 指定，或用 `--mr` 看某個 MR。
+**無法確認分支建立基準／reflog 證據不明確**：用 `--base <ref>` 指定。Git reflog 可能因過期或清理而缺少建立紀錄。**目前就在建立基準分支上**：請用 `--base <ref>` 指定比較基準，或用 `--mr` 看某個 MR。
 
 **MR 抓不到**：你的 GitLab 可能沒開放 MR ref。改用 `--range origin/<目標分支>..origin/<MR 分支>`。
 

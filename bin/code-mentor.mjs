@@ -12,7 +12,7 @@ const SKILL = fileURLToPath(new URL('../skill/code-mentor', import.meta.url));
 const USAGE = `code-mentor — 把 git diff 轉成情境導向的 code 導讀
 
 用法：
-  code-mentor collect [--base <ref>] [--range <a..b>] [--mr <iid> [--remote origin] [--target <branch>]] [--no-worktree] [--keep-cr]
+  code-mentor collect [--base <ref>] [--range <a..b>] [--mr <iid> [--remote origin] [--target <branch>]] [--no-worktree] [--keep-cr] [--include-ignored]
   code-mentor show <fileId|hunkId|path>
   code-mentor check
   code-mentor build [--out <dir>] [--force]
@@ -20,7 +20,7 @@ const USAGE = `code-mentor — 把 git diff 轉成情境導向的 code 導讀
   code-mentor skill path
   code-mentor help`;
 
-const BOOL = new Set(['no-worktree', 'keep-cr', 'force', 'project']);
+const BOOL = new Set(['no-worktree', 'keep-cr', 'include-ignored', 'force', 'project']);
 function parseArgs(argv) {
   const pos = [], opts = {};
   for (let i = 0; i < argv.length; i++) {
@@ -42,6 +42,11 @@ function main() {
       const { diff, dir, created } = collect(opts);
       console.log(`基準 ${diff.base}　merge-base ${diff.baseline} → ${diff.target}　${diff.files.length} 個檔案${diff.source?.mr ? `　MR !${diff.source.mr.iid} ${diff.source.mr.title || ''}` : ''}\n`);
       console.log(table(diff));
+      if (diff.ignored.length > 0) {
+        console.log(`\n已排除 ${diff.ignored.length} 個符合 .gitignore 的檔案（加 --include-ignored 可保留）：`);
+        for (const p of diff.ignored.slice(0, 10)) console.log(p);
+        if (diff.ignored.length > 10) console.log(`…還有 ${diff.ignored.length - 10} 個`);
+      }
       console.log(`\n已寫入 ${path.join(dir, 'diff.json')}${created ? `；已建立 guide.json 骨架` : '；guide.json 已存在，未覆蓋（新檔請自行補進 files）'}`);
       break;
     }

@@ -19,7 +19,7 @@ function resolve(ref) {
   if (hunkById[ref]) return { file: hunkById[ref][0], hunk: hunkById[ref][1] };
   var f = byId[ref] || byPath[ref]; return f ? { file: f } : null;
 }
-var KL = { why: '為什麼', good: '好處', risk: '風險', bug: '問題', info: '說明' };
+var KL = { why: '為什麼', good: '好處', risk: '風險', bug: '問題', info: '說明', what: '改了什麼', how: '怎麼改', syntax: '語法／用法' };
 
 // ---- notes ----
 function seeLabel(see) {
@@ -103,11 +103,16 @@ function ctxRows(g, from, to, f, mode, lang) {
 function gapHtml(b, f, g, i, mode, lang) {
   var st = (b._gaps[i] = b._gaps[i] || { t: 0, b: 0 }), total = g.end - g.start + 1, hidden = total - st.t - st.b, o = [];
   if (st.t) o.push(ctxRows(g, g.start, g.start + st.t - 1, f, mode, lang));
-  if (hidden > 0) {
-    var btn = '';
-    if (g.hasPrev) btn += '<button type="button" data-gap="' + i + '" data-act="down">↓ 展開 ' + Math.min(STEP, hidden) + ' 行</button>';
-    if (g.hasNext) btn += '<button type="button" data-gap="' + i + '" data-act="up">↑ 展開 ' + Math.min(STEP, hidden) + ' 行</button>';
-    btn += '<button type="button" data-gap="' + i + '" data-act="all">展開全部 ' + hidden + ' 行</button>';
+  if (hidden > 0 || st.t || st.b) {
+    var btn = '', bt = function (act, txt, cls) { return '<button type="button"' + (cls ? ' class="' + cls + '"' : '') + ' data-gap="' + i + '" data-act="' + act + '">' + txt + '</button>'; };
+    if (hidden > 0) {
+      if (g.hasPrev) btn += bt('down', '↓ 展開 ' + Math.min(STEP, hidden) + ' 行');
+      if (g.hasNext) btn += bt('up', '↑ 展開 ' + Math.min(STEP, hidden) + ' 行');
+      btn += bt('all', '展開全部 ' + hidden + ' 行');
+    }
+    if (st.t > 0) btn += bt('undown', '↑ 收合 ' + Math.min(STEP, st.t) + ' 行', 'un');
+    if (st.b > 0) btn += bt('unup', '↓ 收合 ' + Math.min(STEP, st.b) + ' 行', 'un');
+    if (st.t + st.b > 0) btn += bt('none', '收合全部 ' + (st.t + st.b) + ' 行', 'un');
     o.push('<tr class="gap"><td colspan="4">' + btn + '</td></tr>');
   }
   if (st.b) o.push(ctxRows(g, g.end - st.b + 1, g.end, f, mode, lang));
@@ -116,10 +121,14 @@ function gapHtml(b, f, g, i, mode, lang) {
 function gapClick(b, btn) {
   var i = +btn.dataset.gap, f = byId[b.dataset.file], hs = f.hunks, g = gapInfo(f, hs, i);
   if (!g) return;
-  var st = b._gaps[i] = b._gaps[i] || { t: 0, b: 0 }, hidden = g.end - g.start + 1 - st.t - st.b;
-  if (btn.dataset.act === 'all') st.t += hidden;
-  else if (btn.dataset.act === 'down') st.t += Math.min(STEP, hidden);
-  else st.b += Math.min(STEP, hidden);
+  var st = b._gaps[i] = b._gaps[i] || { t: 0, b: 0 }, hidden = Math.max(0, g.end - g.start + 1 - st.t - st.b), act = btn.dataset.act;
+  if (act === 'all') st.t += hidden;
+  else if (act === 'down') st.t += Math.min(STEP, hidden);
+  else if (act === 'up') st.b += Math.min(STEP, hidden);
+  else if (act === 'undown') st.t = Math.max(0, st.t - STEP);
+  else if (act === 'unup') st.b = Math.max(0, st.b - STEP);
+  else if (act === 'none') { st.t = 0; st.b = 0; }
+  else return;
   fillBlock(b, true);
 }
 
@@ -163,7 +172,8 @@ function mkBlock(ref, notes, opts) {
   var fh = d.querySelector('.fh'), bd = d.querySelector('.bd'), fd = d.querySelector('.fd'), tg = d.querySelector('.tg');
   bd.style.display = open ? '' : 'none';
   tg.textContent = '顯示：' + (modeOf(d) === 'sbs' ? '並排' : '單欄');
-  function setOpen(v) { d.dataset.open = v ? '1' : '0'; bd.style.display = v ? '' : 'none'; fd.textContent = v ? '收合' : '展開'; if (v) fillBlock(d); }
+  // lazy: hand rendering to the viewport observer (expand-all), instead of rendering now
+  function setOpen(v, lazy) { d.dataset.open = v ? '1' : '0'; bd.style.display = v ? '' : 'none'; fd.textContent = v ? '收合' : '展開'; if (v) { if (lazy && io) io.observe(d); else fillBlock(d); } }
   d.setOpen = setOpen;
   fh.addEventListener('click', function (e) { var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return; setOpen(d.dataset.open !== '1'); });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });

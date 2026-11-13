@@ -1,7 +1,7 @@
 // ---- app: header, tabs, views ----
 var $main = document.getElementById('main'), $toc = document.getElementById('toc');
 var ST = { done: ['done', '✅ 已完成'], unverified: ['unverified', '⚠️ 未驗證'], gap: ['gap', '❌ 缺口'] };
-var CK = { why: '為什麼', good: '好處', risk: '風險', bug: '問題' };
+var CK = { why: '為什麼', good: '好處', risk: '風險', bug: '問題', what: '改了什麼', how: '怎麼改', syntax: '語法／用法' };
 var SRC = D.source || { mode: 'branch' };
 var units = [];
 (G.scenarios || []).forEach(function (sc) { (sc.stations || []).forEach(function (s) { units.push({ s: s, sc: sc }); }); });
@@ -58,9 +58,9 @@ function head() {
   if (mr) s += '<div class="meta">' + (mr.url ? '<a href="' + h(mr.url) + '">' + h(mr.title || ('!' + mr.iid)) + '</a>' : h(mr.title || '')) + (mr.author ? '　作者 ' + h(mr.author) : '') + (mr.target ? '　目標 <code>' + h(mr.target) + '</code>' : '') + '</div>';
   if (mr && mr.description) s += '<details class="commits"><summary>MR 說明</summary>' + md(mr.description) + '</details>';
   if (G.summary) s += '<div class="lead">' + inl(G.summary) + '</div>';
-  s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + '</div>';
+  s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
-  s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span></div></header>';
+  s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span><button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div></header>';
   s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a></nav></div><div class="content" id="content"></div>';
   return s;
 }
@@ -108,6 +108,7 @@ function viewMech() {
 var FSORT = lsGet('dg.fsort', 'path');
 function viewFiles() {
   var c = document.createDocumentFragment(), toc = '';
+  FWRAPS.length = 0;
   var tools = document.createElement('div'); tools.className = 'tools';
   tools.innerHTML = '排序：<select id="fsort"><option value="path">依路徑</option><option value="size">依大小</option></select>';
   c.appendChild(tools);
@@ -117,7 +118,11 @@ function viewFiles() {
   var max = Math.max.apply(null, [1].concat(files.map(function (f) { return f.additions + f.deletions; }))), lastDir = null;
   list.forEach(function (f) {
     var dir = FSORT === 'size' ? null : (f.path.indexOf('/') >= 0 ? f.path.slice(0, f.path.lastIndexOf('/')) : '(root)');
-    if (dir !== null && dir !== lastDir) { var dh = document.createElement('div'); dh.className = 'dir'; dh.textContent = dir; c.appendChild(dh); lastDir = dir; }
+    if (dir !== null && dir !== lastDir) {
+      var dh = document.createElement('div'); dh.className = 'dir'; dh.textContent = dir; c.appendChild(dh); lastDir = dir;
+      toc += '<div class="grp" title="' + h(dir) + '">' + h(dir.split('/').slice(-2).join('/')) + '</div>';
+    } else if (dir === null && !toc) toc = '<div class="grp">檔案</div>';
+    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '">' + h(f.path.slice(f.path.lastIndexOf('/') + 1)) + '</a>';
     var refs = refsOf(f), g = (G.files || {})[f.path] || {};
     var wrap = document.createElement('div'); wrap.id = 'file-' + f.id;
     var tot = f.additions + f.deletions, w = Math.max(6, Math.round(90 * tot / max)), aw = tot ? Math.round(100 * f.additions / tot) : 0;
@@ -129,13 +134,13 @@ function viewFiles() {
     var holder = document.createElement('div'); wrap.appendChild(holder);
     row.addEventListener('click', function (e) { if (e.target.tagName === 'A') return; openFile(wrap, f); });
     wrap._open = function () { return openFile(wrap, f, true); };
+    wrap._f = f; FWRAPS.push(wrap);
     c.appendChild(wrap);
-    if (FSORT !== 'size' || toc === '') toc += '';
   });
-  toc = '<div class="grp">檔案</div>' + list.slice(0, 80).map(function (f) { return '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '">' + h(f.path.slice(f.path.lastIndexOf('/') + 1)) + '</a>'; }).join('');
   return { node: c, toc: toc };
 }
-function openFile(wrap, f, keepOpen) {
+var FWRAPS = [];
+function openFile(wrap, f, keepOpen, lazy) {
   var holder = wrap.lastChild;
   if (holder.firstChild) { if (keepOpen) return holder.firstChild; holder.innerHTML = ''; return null; }
   var g = (G.files || {})[f.path] || {};
@@ -144,7 +149,8 @@ function openFile(wrap, f, keepOpen) {
   var pre = document.createElement('div');
   pre.innerHTML = schemaHtml(f) + mappingHtml(f);
   b.querySelector('.fh').insertAdjacentHTML('afterend', pre.innerHTML);
-  holder.appendChild(b); b.querySelector('.fd').textContent = '收合'; fillBlock(b, true);
+  holder.appendChild(b); b.querySelector('.fd').textContent = '收合';
+  if (lazy && io) io.observe(b); else fillBlock(b, true);
   return b;
 }
 
@@ -185,9 +191,29 @@ function render() {
   if (tab === 'files' && hs[1]) doJump(hs[1], hs[2], hs[3]);
   else if (!hs[1] && hs[0] && !/^(scenario|files|mech)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
 }
+// Global collapse / expand. Expand confirms first and renders lazily (viewport observer).
+function toggleAll(open) {
+  var targets = cur === 'files'
+    ? FWRAPS.filter(function (w) { return !!w.lastChild.firstChild !== open; })
+    : BLOCKS.filter(function (b) { return b.isConnected && (b.dataset.open === '1') !== open; });
+  if (open) {
+    var seen = {}, nf = 0, big = 0, lines = 0;
+    targets.forEach(function (x) {
+      var f = x._f || byId[x.dataset.file]; if (seen[f.id]) return; seen[f.id] = 1;
+      nf++; if (f.large || f.generated) big++; lines += f.additions + f.deletions;
+    });
+    if (!nf) return;
+    if (!window.confirm('要展開 ' + nf + ' 個檔案區塊嗎？其中 ' + big + ' 個是大修改或產生檔，合計約 ' + lines + ' 行變更。全部展開可能讓頁面變慢。')) return;
+  }
+  targets.forEach(function (x) {
+    if (cur === 'files') { if (open) openFile(x, x._f, false, true); else x.lastChild.innerHTML = ''; }
+    else x.setOpen(open, open);
+  });
+}
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],#gseg button') : null; if (!t) return;
-  if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-all],#gseg button') : null; if (!t) return;
+  if (t.dataset.all) toggleAll(t.dataset.all === 'open');
+  else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
   else if (t.dataset.jump) {
     var id = t.dataset.jump, want = /^m-/.test(id) && id !== 'm-er' || id === 'm-er' ? 'mech' : 'scenario';
     if (t.closest('.dg-toc') || t.closest('.refs')) {
