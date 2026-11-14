@@ -1,6 +1,6 @@
 {
   "name": "@edemilorhea/code-mentor",
-  "version": "0.1.107",
+  "version": "0.1.108",
   "description": "把本機 git diff 轉成情境導向的 code 導讀（單檔離線 HTML + Markdown）",
   "type": "module",
   "main": "plugin/index.mjs",
