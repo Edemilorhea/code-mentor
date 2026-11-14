@@ -16,16 +16,12 @@ var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full
     root.dataset.theme = theme; root.classList.toggle('toc-off', off);
     var b = document.querySelector('[data-ui=theme]'); if (b) b.textContent = theme === 'light' ? '深色' : '淺色';
     b = document.querySelector('[data-ui=toc]'); if (b) b.textContent = off ? '顯示側欄' : '收合側欄';
-    var fs = codeFs(); root.style.setProperty('--fs-code', fs + 'px');
-    b = document.querySelector('[data-ui=fsv]'); if (b) b.textContent = fs + 'px';
   }
-  function codeFs() { var v = parseFloat(lsGet('dg.codefs', '')); return v >= 10 && v <= 24 ? v : 14; }
   apply();
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-ui]'); if (!t) return;
     var u = t.dataset.ui;
-    if (u === 'fs-' || u === 'fs+' || u === 'fsv') lsSet('dg.codefs', u === 'fsv' ? '' : String(Math.min(24, Math.max(10, codeFs() + (u === 'fs+' ? 1 : -1)))));
-    else if (u === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
+    if (u === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
     else lsSet('dg.toc', root.classList.contains('toc-off') ? '' : 'off');
     apply();
   });
@@ -221,6 +217,9 @@ var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function 
   es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); if (e.target.dataset.open === '1') fillBlock(e.target); } });
 }, { rootMargin: '600px' }) : null;
 var BLOCKS = [];
+// per-file code font size (px) set from the toolbar; survives re-render/route changes, not page reload
+var FS = {};
+function fsOf(b) { return FS[b.dataset.file] || 14; }
 function mkBlock(ref, notes, opts) {
   var r = resolve(ref); if (!r) return null;
   var f = r.file, g = (D.guideFiles || {})[f.path] || (G.files || {})[f.path] || {}, d = document.createElement('div');
@@ -246,6 +245,7 @@ function mkBlock(ref, notes, opts) {
     var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold]'); if (!bt) return;
     if (bt.dataset.fold) { d._unfold[bt.dataset.fold] = 1; fillBlock(d, true); } else gapClick(d, bt);
   });
+  if (FS[f.id]) d.style.setProperty('--fs-code', FS[f.id] + 'px');
   if (open) { if (io) io.observe(d); else fillBlock(d); }
   BLOCKS.push(d);
   return d;
@@ -347,7 +347,13 @@ function setGlobalFull(v) {
     var up = !!gapRow(cur, -1), dn = !!gapRow(cur, 1);
     q('[data-tb=u20]').disabled = q('[data-tb=uall]').disabled = !up;
     q('[data-tb=d20]').disabled = q('[data-tb=dall]').disabled = !dn;
-    q('[data-tb=mode]').disabled = q('[data-tb=full]').disabled = false;
+    q('[data-tb=fsv]').textContent = fsOf(cur) + 'px';
+  }
+  function setFs(v) {
+    var id = cur.dataset.file;
+    if (v === 14) delete FS[id]; else FS[id] = v;
+    // the same file can appear in several stations: resize every block of this file
+    BLOCKS.forEach(function (b) { if (b.dataset.file === id) { if (v === 14) b.style.removeProperty('--fs-code'); else b.style.setProperty('--fs-code', v + 'px'); } });
   }
   function later() { if (!raf) raf = requestAnimationFrame(update); }
   tb.addEventListener('click', function (e) {
@@ -356,6 +362,8 @@ function setGlobalFull(v) {
     if (a === 'open') cur.setOpen(cur.dataset.open !== '1');
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
+    else if (a === 'fsv') setFs(14);
+    else if (a === 'fs-' || a === 'fs+') setFs(Math.min(24, Math.max(10, fsOf(cur) + (a === 'fs+' ? 1 : -1))));
     else if (a === 'u20' || a === 'uall') return expand(-1, a === 'uall');
     else if (a === 'd20' || a === 'dall') return expand(1, a === 'dall');
     update();
