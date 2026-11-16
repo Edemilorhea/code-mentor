@@ -125,19 +125,29 @@ function viewLogic() {
     var group = [];
     (sec.steps || []).forEach(function (st, i) {
       var box = document.createElement('div'); box.className = 'lg-step';
-      box.innerHTML = '<h4><span class="num">' + (i + 1) + '</span>' + h(st.title || '') + '</h4>' + md(st.text || '') + '<div class="lg-slot"></div>';
+      box.innerHTML = '<h4><span class="num">' + (i + 1) + '</span>' + h(st.title || '') + '<span class="lg-pin">已固定・再點解除</span></h4>' + md(st.text || '') + '<div class="lg-slot"></div>';
       left.appendChild(box);
       var b = mkBlock(st.hunk, [{ hunk: st.hunk, line: st.line, to: st.to, side: st.side, kind: st.kind, text: st.title || '', step: i + 1 }]);
       if (b) panel.appendChild(b);
       group.push({ box: box, b: b });
     });
     if (group.length) d.appendChild(side);
+    group.sec = d; group.pin = -1;
+    // click pins a step: scrolling no longer switches it, so the diff on the right can be read; click again to release
+    group.forEach(function (s, i) {
+      s.box.addEventListener('click', function (e) {
+        if (mq.matches || e.target.closest('a') || String(window.getSelection())) return;
+        group.pin = group.pin === i ? -1 : i; pickStep();
+      });
+    });
     var tail = '<div class="prose"><div class="three">' + row('結果', sec.result) + row('交給誰', sec.handoff) + row('失敗時', sec.failure) + '</div></div>';
     d.insertAdjacentHTML('beforeend', tail);
     c.appendChild(d); stepEls.push(group);
     toc += '<a href="#l-' + h(sec.id) + '" data-jump="l-' + h(sec.id) + '">' + h(sec.question || sec.id) + '</a>';
   });
   var mq = window.matchMedia('(max-width:900px)'), raf = 0;
+  // room below the last section so its last step can still reach the trigger line
+  var pad = document.createElement('div'); pad.className = 'lg-end'; c.appendChild(pad);
   function layout() {
     stepEls.forEach(function (g) { g.forEach(function (s) {
       if (!s.b) return;
@@ -145,12 +155,19 @@ function viewLogic() {
     }); });
     pickStep();
   }
+  // active step = the last one whose top has passed a line at 1/3 of the viewport (a pinned step wins);
+  // a pin is released once its section leaves the viewport
   function pickStep() {
-    raf = 0; var y = window.innerHeight / 2;
+    raf = 0; var vh = window.innerHeight, y = vh / 3;
     stepEls.forEach(function (g) {
-      var best = -1, bd = Infinity;
-      g.forEach(function (s, i) { var r = s.box.getBoundingClientRect(), dd = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0; if (dd < bd) { bd = dd; best = i; } });
-      g.forEach(function (s, i) { s.box.classList.toggle('is-active', i === best); if (s.b) s.b.style.display = mq.matches || i === best ? '' : 'none'; });
+      if (g.pin >= 0) { var sr = g.sec.getBoundingClientRect(); if (sr.bottom < 0 || sr.top > vh) g.pin = -1; }
+      var best = 0;
+      if (g.pin >= 0) best = g.pin;
+      else g.forEach(function (s, i) { if (s.box.getBoundingClientRect().top <= y) best = i; });
+      g.forEach(function (s, i) {
+        s.box.classList.toggle('is-active', i === best); s.box.classList.toggle('is-pinned', i === g.pin);
+        if (s.b) s.b.style.display = mq.matches || i === best ? '' : 'none';
+      });
     });
   }
   stepEls.forEach(function (g) { g.forEach(function (s) { if (s.b) s.b._panel = s.b.parentNode; }); });
