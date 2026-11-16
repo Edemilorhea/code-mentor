@@ -51,9 +51,8 @@ description: 把本機 git 分支／修改／MR 的 diff 做成情境導向的 c
 |---|---|---|
 | 在對話裡看改了什麼，不產生檔案 | 「這次改了什麼」 | change-understanding-review |
 | 一站一站被帶著讀 | 「帶我讀這次的 code」 | implementation-understanding-tutor |
-| 被考是不是真的懂 | 切到 Coach，說「考我這個分支」 | Coach |
 
-這三個是另外的 skill／agent，沒安裝就沒有。
+這兩個是另外的 skill，沒安裝就沒有。
 <!-- prompt-help:end -->
 
 ## 0. 內容大腦：先決定誰負責「怎麼理解、怎麼講」
