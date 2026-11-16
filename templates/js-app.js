@@ -61,7 +61,7 @@ function head() {
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
   s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span><span class="seg" id="fseg"><button type="button" data-f="0">重點</button><button type="button" data-f="1">完整</button></span><button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div></header>';
-  s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a></nav></div><div class="content" id="content"></div>';
+  s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
   return s;
 }
 function syncSeg() { Array.prototype.forEach.call(document.querySelectorAll('#gseg button'), function (b) { b.setAttribute('aria-pressed', b.dataset.m === VIEW.mode ? 'true' : 'false'); });
@@ -104,6 +104,61 @@ function viewMech() {
   }
   (G.mechanisms || []).forEach(function (m) { c.appendChild(stationCard({ s: m, mech: true })); toc += '<a href="#m-' + h(m.id) + '" data-jump="m-' + h(m.id) + '">' + h(m.title || m.id) + '</a>'; });
   if (!c.childNodes.length) { var e = document.createElement('p'); e.className = 'empty'; e.textContent = '沒有機制／架構說明。'; c.appendChild(e); }
+  return { node: c, toc: toc };
+}
+var lgOff = null; // detaches the logic tab's scroll/resize listeners when the view is rebuilt
+function viewLogic() {
+  var c = document.createDocumentFragment(), toc = '', secs = G.logic || [], stepEls = [];
+  if (!secs.length) { var e = document.createElement('p'); e.className = 'empty'; e.textContent = '沒有邏輯導讀。'; c.appendChild(e); return { node: c, toc: toc }; }
+  var sc0 = (G.scenarios || [])[0], hd = document.createElement('p'); hd.className = 'meta';
+  hd.innerHTML = '跟著情境：' + (G.summary ? inl(G.summary) : h(sc0 ? (sc0.title || sc0.id) : '')); c.appendChild(hd);
+  secs.forEach(function (sec) {
+    var own = null, ownSc = null;
+    (G.scenarios || []).forEach(function (sc) { (sc.stations || []).forEach(function (s) { if (s.id === sec.station) { own = s; ownSc = sc; } }); });
+    var d = document.createElement('section'); d.className = 'card'; d.id = 'l-' + sec.id;
+    var pre = own ? '<a href="#scenario" data-goto="s-' + h(own.id) + '" title="跳到依情境的這一站"><span class="num">' + h(numbering(ownSc)[own.id]) + '</span>' + h(own.title || own.id) + '</a>　' : '';
+    var row = function (k, v) { return v ? '<div><b>' + k + '</b> <span class="v">' + inl(v) + '</span></div>' : ''; };
+    var t = '<div class="prose"><h3>' + pre + h(sec.question || sec.id) + '</h3><div class="three">' + row('情境', sec.situation) + row('輸入', sec.input) + '</div></div>';
+    d.innerHTML = t;
+    var side = document.createElement('div'), left = document.createElement('div'), panel = document.createElement('div');
+    side.className = 'lg-side'; left.className = 'lg-steps'; panel.className = 'lg-stick'; side.appendChild(left); side.appendChild(panel);
+    var group = [];
+    (sec.steps || []).forEach(function (st, i) {
+      var box = document.createElement('div'); box.className = 'lg-step';
+      box.innerHTML = '<h4><span class="num">' + (i + 1) + '</span>' + h(st.title || '') + '</h4>' + md(st.text || '') + '<div class="lg-slot"></div>';
+      left.appendChild(box);
+      var b = mkBlock(st.hunk, [{ hunk: st.hunk, line: st.line, to: st.to, side: st.side, kind: st.kind, text: st.title || '', step: i + 1 }]);
+      if (b) panel.appendChild(b);
+      group.push({ box: box, b: b });
+    });
+    if (group.length) d.appendChild(side);
+    var tail = '<div class="prose"><div class="three">' + row('結果', sec.result) + row('交給誰', sec.handoff) + row('失敗時', sec.failure) + '</div></div>';
+    d.insertAdjacentHTML('beforeend', tail);
+    c.appendChild(d); stepEls.push(group);
+    toc += '<a href="#l-' + h(sec.id) + '" data-jump="l-' + h(sec.id) + '">' + h(sec.question || sec.id) + '</a>';
+  });
+  var mq = window.matchMedia('(max-width:900px)'), raf = 0;
+  function layout() {
+    stepEls.forEach(function (g) { g.forEach(function (s) {
+      if (!s.b) return;
+      var dest = mq.matches ? s.box.lastChild : s.b._panel; if (s.b.parentNode !== dest) dest.appendChild(s.b);
+    }); });
+    pickStep();
+  }
+  function pickStep() {
+    raf = 0; var y = window.innerHeight / 2;
+    stepEls.forEach(function (g) {
+      var best = -1, bd = Infinity;
+      g.forEach(function (s, i) { var r = s.box.getBoundingClientRect(), dd = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0; if (dd < bd) { bd = dd; best = i; } });
+      g.forEach(function (s, i) { s.box.classList.toggle('is-active', i === best); if (s.b) s.b.style.display = mq.matches || i === best ? '' : 'none'; });
+    });
+  }
+  stepEls.forEach(function (g) { g.forEach(function (s) { if (s.b) s.b._panel = s.b.parentNode; }); });
+  function onScroll() { if (!raf) raf = requestAnimationFrame(pickStep); }
+  window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll);
+  if (mq.addEventListener) mq.addEventListener('change', layout);
+  lgOff = function () { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (mq.removeEventListener) mq.removeEventListener('change', layout); lgOff = null; };
+  setTimeout(layout, 0); // after the node is attached, so rects are real
   return { node: c, toc: toc };
 }
 var FSORT = lsGet('dg.fsort', 'kind');
@@ -205,17 +260,17 @@ function doJump(fid, line, hid) {
 // ---- router ----
 var view = null, cur = null;
 function render() {
-  var hs = (location.hash || '#scenario').slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' ? hs[0] : 'scenario';
+  var hs = (location.hash || '#scenario').slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' ? hs[0] : 'scenario';
   if (cur !== tab) {
-    BLOCKS.length = 0;
-    var v = tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : viewScenario();
+    BLOCKS.length = 0; if (lgOff) lgOff();
+    var v = tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
     $toc.innerHTML = v.toc; cur = tab;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs a'), function (a) { a.classList.toggle('on', a.dataset.t === tab); });
     var fs = document.getElementById('fsort'); if (fs) { fs.value = FSORT; fs.onchange = function () { FSORT = fs.value; lsSet('dg.fsort', FSORT); cur = null; render(); }; }
   }
   if (tab === 'files' && hs[1]) doJump(hs[1], hs[2], hs[3]);
-  else if (!hs[1] && hs[0] && !/^(scenario|files|mech)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
+  else if (!hs[1] && hs[0] && !/^(scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
 }
 // Global collapse / expand. Expand confirms first and renders lazily (viewport observer).
 function toggleAll(open) {
@@ -237,11 +292,12 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-all],#gseg button,#fseg button') : null; if (!t) return;
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all],#gseg button,#fseg button') : null; if (!t) return;
   if (t.dataset.all) toggleAll(t.dataset.all === 'open');
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
+  else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { var el = document.getElementById(gid); if (el) el.scrollIntoView(); }, 0); }
   else if (t.dataset.jump) {
-    var id = t.dataset.jump, want = /^m-/.test(id) && id !== 'm-er' || id === 'm-er' ? 'mech' : 'scenario';
+    var id = t.dataset.jump, want = /^l-/.test(id) ? 'logic' : /^m-/.test(id) ? 'mech' : 'scenario';
     if (t.closest('.dg-toc') || t.closest('.refs')) {
       e.preventDefault();
       var tab = cur === 'files' && t.closest('.refs') ? want : cur;

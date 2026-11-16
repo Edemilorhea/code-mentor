@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runCollect, runShow, runCheck, runBuild } from '../lib/run.mjs';
+import { promptHelp, depthOf } from '../lib/prompt-help.mjs';
 
 const SKILL_FILE = fileURLToPath(new URL('../skill/code-mentor/SKILL.md', import.meta.url));
 
@@ -77,9 +78,18 @@ export default {
     const commands = await ctx.command.transform(editor => {
       editor.add({
         name: 'code-mentor',
-        description: '把目前分支／MR 的修改做成 code 導讀 HTML',
+        description: '把目前分支／MR 的修改做成 code 導讀 HTML（可加 概覽｜導讀｜教學；--help 看怎麼下 prompt）',
         execute: async invocation => {
           const argument = String(invocation.prompt?.text ?? '').trim();
+          if (/(^|\s)(--help|-h)(\s|$)/.test(argument)) {
+            const text = `使用者要看 code-mentor 的用法。把下面的內容原樣回給使用者（保留標題與表格），不要呼叫任何工具，不要載入 skill，不要加其他說明：\n\n${promptHelp()}`;
+            await ctx.session.prompt({ sessionID: invocation.sessionID, text, delivery: invocation.delivery });
+            return;
+          }
+          const depth = depthOf(argument);
+          const depthLine = depth
+            ? `深度等級：${depth}（使用者用參數指定，以此為準）`
+            : '深度等級：未用參數指定。依 code-mentor skill 第 0.5 節從使用者的話判斷，判斷不出來就用「導讀」。';
           const res = await ctx.skill.list();
           const list = Array.isArray(res) ? res : (res?.data ?? []);
           const has = id => (list.some(s => s.id === id || s.name === id) ? '有' : '沒有');
@@ -90,7 +100,9 @@ export default {
 - change-understanding-review：${has('change-understanding-review')}
 - diagram-design：${has('diagram-design')}
 
-依 code-mentor skill 第 0 節「內容大腦」選擇路徑。操作 diff 一律用 code_mentor 工具（collect、show、check、build），不要另外用 shell 呼叫 code-mentor CLI。`;
+${depthLine}
+
+依 code-mentor skill 第 0 節「內容大腦」選擇路徑，依第 0.5 節決定深度等級並寫進 guide.json 的 depth。操作 diff 一律用 code_mentor 工具（collect、show、check、build），不要另外用 shell 呼叫 code-mentor CLI。`;
           await ctx.session.prompt({ sessionID: invocation.sessionID, text, delivery: invocation.delivery });
         },
       });

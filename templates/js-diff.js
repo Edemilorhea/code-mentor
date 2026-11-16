@@ -116,7 +116,7 @@ function hunkHtml(f, hk, ns, mode, lang, b, focus) {
     if (!cr || rowKept(rows[i], cr)) { emit(rows[i++]); continue; }
     var j = i; while (j < rows.length && !rowKept(rows[j], cr)) j++;
     var key = hk.id + ':' + i;
-    if (b._unfold[key]) rows.slice(i, j).forEach(emit);
+    if (b._unfold[key]) { o.push('<tr class="gap"><td colspan="4"><button type="button" class="un" data-refold="' + h(key) + '">⋮ 收合這 ' + (j - i) + ' 行</button></td></tr>'); rows.slice(i, j).forEach(emit); }
     else o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ 略過 ' + (j - i) + ' 行，點開</button></td></tr>');
     i = j;
   }
@@ -180,6 +180,8 @@ function gapClick(b, btn) {
 
 // ---- block ----
 function modeOf(b) { return b._ov || VIEW.mode; }
+// long lines: side-by-side wraps by default (like GitLab), single column scrolls; the toolbar overrides per block
+function wrapOf(b) { return b._wrap != null ? b._wrap : modeOf(b) === 'sbs'; }
 function fullOf(b) { return b._fv != null ? b._fv : VIEW.full; }
 function fvLabel(b) {
   var f = byId[b.dataset.file];
@@ -208,7 +210,8 @@ function fillBlock(b, force) {
   var cg = mode === 'sbs' ? '<colgroup><col style="width:52px"><col class="cm"><col style="width:52px"><col></colgroup>' : '<colgroup><col style="width:52px"><col style="width:52px"><col style="width:20px"><col></colgroup>';
   var bd = b.querySelector('.bd');
   bd.innerHTML = '<table class="df ' + mode + '">' + cg + body + '</table>' + (mode === 'sbs' ? '<div class="sph" title="拖曳調整左右欄寬，雙擊還原"></div>' : '');
-  b.dataset.done = '1'; b.dataset.rmode = key;
+  b.dataset.done = '1'; b.dataset.rmode = key; b.classList.toggle('wrapall', wrapOf(b));
+  if (bd.clientWidth) b.style.setProperty('--bdw', bd.clientWidth + 'px'); // notes stay within the visible width when code scrolls sideways
   var tg = b.querySelector('.tg');
   tg.textContent = '顯示：' + (mode === 'sbs' ? '並排' : '單欄');
   b.querySelector('.fv').textContent = fvLabel(b);
@@ -242,8 +245,10 @@ function mkBlock(ref, notes, opts) {
   fh.addEventListener('click', function (e) { var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return; setOpen(d.dataset.open !== '1'); });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
   bd.addEventListener('click', function (e) {
-    var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold]'); if (!bt) return;
-    if (bt.dataset.fold) { d._unfold[bt.dataset.fold] = 1; fillBlock(d, true); } else gapClick(d, bt);
+    var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold],button[data-refold]'); if (!bt) return;
+    if (bt.dataset.fold) { d._unfold[bt.dataset.fold] = 1; fillBlock(d, true); }
+    else if (bt.dataset.refold) { delete d._unfold[bt.dataset.refold]; fillBlock(d, true); }
+    else gapClick(d, bt);
   });
   if (FS[f.id]) d.style.setProperty('--fs-code', FS[f.id] + 'px');
   if (open) { if (io) io.observe(d); else fillBlock(d); }
@@ -323,6 +328,23 @@ function setGlobalFull(v) {
     }
     return hit;
   }
+  // nearest row (to the center line) that can fold something back
+  var UN = 'button[data-act=undown],button[data-act=unup],button[data-refold]';
+  function unRow(b) {
+    if (!b || b.dataset.open !== '1') return null;
+    var y = midY(), rows = b.querySelectorAll('tr.gap'), best = null, bd = Infinity;
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].querySelector(UN)) continue;
+      var r = rows[i].getBoundingClientRect(), d = Math.abs(r.top + r.height / 2 - y);
+      if (d < bd) { bd = d; best = rows[i]; }
+    }
+    return best;
+  }
+  function collapse(all) {
+    if (all) { cur._gaps = {}; cur._unfold = {}; fillBlock(cur, true); return update(); }
+    var row = unRow(cur); if (!row) return;
+    row.querySelector(UN).click(); update();
+  }
   function expand(dir, all) {
     var row = gapRow(cur, dir); if (!row) return;
     // GitLab convention: "up" reveals the lines nearest the following hunk, "down" those after the previous one
@@ -347,7 +369,11 @@ function setGlobalFull(v) {
     var up = !!gapRow(cur, -1), dn = !!gapRow(cur, 1);
     q('[data-tb=u20]').disabled = q('[data-tb=uall]').disabled = !up;
     q('[data-tb=d20]').disabled = q('[data-tb=dall]').disabled = !dn;
+    var un = !!unRow(cur);
+    q('[data-tb=c20]').disabled = !un;
+    q('[data-tb=call]').disabled = !(un || Object.keys(cur._unfold || {}).length);
     q('[data-tb=fsv]').textContent = fsOf(cur) + 'px';
+    q('[data-tb=wrap]').textContent = wrapOf(cur) ? '不換行' : '自動換行';
   }
   function setFs(v) {
     var id = cur.dataset.file;
@@ -362,10 +388,12 @@ function setGlobalFull(v) {
     if (a === 'open') cur.setOpen(cur.dataset.open !== '1');
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
+    else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); }
     else if (a === 'fsv') setFs(14);
     else if (a === 'fs-' || a === 'fs+') setFs(Math.min(24, Math.max(10, fsOf(cur) + (a === 'fs+' ? 1 : -1))));
     else if (a === 'u20' || a === 'uall') return expand(-1, a === 'uall');
     else if (a === 'd20' || a === 'dall') return expand(1, a === 'dall');
+    else if (a === 'c20' || a === 'call') return collapse(a === 'call');
     update();
   });
   window.addEventListener('scroll', later, { passive: true });
