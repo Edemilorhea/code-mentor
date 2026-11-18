@@ -43,7 +43,8 @@ export default {
         name, description, options: { codemode: false, namespace: 'code_mentor' }, input, execute: wrap(run),
       });
 
-      add('collect', '比對分支／MR／range，寫出 .code-mentor/diff.json 與 guide.json 骨架，回傳檔案表格。',
+      const dirArg = str('工作資料夾（預設用最近一次 collect 回報的資料夾）');
+      add('collect', '比對分支／MR／range，在 .code-mentor/output/docs/<來源>-<hash>/ 寫出 diff.json 與 guide.json 骨架，回傳工作資料夾與檔案表格。同一來源預設沿用並覆蓋；使用者要求新副本時才設 new。',
         obj({
           base: str('比對基準 ref'),
           range: str('a..b 形式的範圍'),
@@ -53,6 +54,7 @@ export default {
           noWorktree: bool('只比到 HEAD，不含未 commit 的修改'),
           includeIgnored: bool('保留符合 .gitignore 的檔案'),
           keepCr: bool('保留 CR 字元'),
+          new: bool('另開新副本資料夾，不覆蓋這個來源既有的產出（只在使用者要求時使用）'),
         }),
         i => {
           const opts = {};
@@ -60,19 +62,20 @@ export default {
           if (i.noWorktree) opts['no-worktree'] = true;
           if (i.includeIgnored) opts['include-ignored'] = true;
           if (i.keepCr) opts['keep-cr'] = true;
+          if (i.new) opts.new = true;
           return runCollect(opts, dir);
         });
 
       add('show', '顯示指定檔案或 hunk 的 diff 內容。',
-        obj({ ref: str('fileId、hunkId（f3#2）或路徑') }, ['ref']),
-        i => runShow(i.ref, dir));
+        obj({ ref: str('fileId、hunkId（f3#2）或路徑'), dir: dirArg }, ['ref']),
+        i => runShow(i.ref, dir, i.dir));
 
       add('check', '檢查 guide.json 是否涵蓋 diff 並符合格式，回傳錯誤與警告。',
-        obj({}), () => runCheck(dir));
+        obj({ dir: dirArg }), i => runCheck(dir, i.dir));
 
-      add('build', '先 check，通過後產生單檔離線 index.html 與 guide.md 並回傳路徑。',
-        obj({ out: str('輸出目錄（預設 .code-mentor/out）'), force: bool('check 有錯誤時仍強制 build') }),
-        i => runBuild({ ...(i.out ? { out: String(i.out) } : {}), force: !!i.force }, dir));
+      add('build', '先 check，通過後在工作資料夾產生單檔離線 index.html 與 guide.md 並回傳路徑。',
+        obj({ dir: dirArg, out: str('輸出目錄（預設就是工作資料夾）'), force: bool('check 有錯誤時仍強制 build') }),
+        i => runBuild({ ...(i.dir ? { dir: String(i.dir) } : {}), ...(i.out ? { out: String(i.out) } : {}), force: !!i.force }, dir));
     });
 
     const commands = await ctx.command.transform(editor => {

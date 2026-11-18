@@ -83,7 +83,7 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
    - guided 模式的「一次一站、等使用者說下一站」：code-mentor 一次產出整份 HTML。
    - 「每輪閱讀預算」（一輪最多 1 張圖、3 段程式）：改用本 skill 的「一站只回答一個問題」。
    - tutor 的「Optional: HTML walkthrough」與 `explain-with-code-walkthrough`：tutor 的「程式邏輯」內容寫進 `guide.json` 的 `logic`，由 `build` 產生「邏輯導讀」分頁，不另外寫 HTML。
-   - tutor 的輸出路徑 `$TEMP/opencode/walkthrough/`：輸出一律在 `.code-mentor/out/`。
+   - tutor 的輸出路徑 `$TEMP/opencode/walkthrough/`：輸出一律在 `collect` 回報的工作資料夾。
 5. 兩邊衝突時：**格式、覆蓋、輸出位置聽 code-mentor；內容怎麼講聽 tutor。**
 6. 把 tutor 的結果對應到 `guide.json`：情境句 → `situation`／`purpose`／`did`；逐段講解 → 帶 `step` 與 `to` 的 notes；需要先懂的機制 → 子站或 `mechanisms`。`教學` 等級時，核心方法的程式邏輯另外寫進 `logic`：「為了什麼」情境句 → `situation`；輸入／前置狀態 → `input`；逐段講解 → `steps`；結果 → `result`；交給誰 → `handoff`；失敗或下游影響 → `failure`。
 
@@ -100,7 +100,7 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
 
 ### D：圖
 
-- 有 `diagram-design`：只在使用者要求「架構圖」「sequence 圖」或一站的機制用文字講不清楚時，才用它畫圖。把畫好的單檔 HTML 存在 `.code-mentor/out/diagrams/`，在該站的 callout 裡寫相對路徑連結。不要把它的 HTML 貼進 `guide.json`。
+- 有 `diagram-design`：只在使用者要求「架構圖」「sequence 圖」或一站的機制用文字講不清楚時，才用它畫圖。把畫好的單檔 HTML 存在工作資料夾的 `diagrams/`（和 `index.html` 同一層），在該站的 callout 裡寫相對路徑連結。不要把它的 HTML 貼進 `guide.json`。
 - 沒有 `diagram-design`：用 `guide.json` 的 `mechanisms[].diagram`（flow／state）。migration 的資料表圖由工具自動產生，不必另畫。
 
 ### 不論哪條路徑都不能違反
@@ -152,7 +152,10 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
 - 在 OpenCode 裡且有 `code_mentor` 工具（`collect`、`show`、`check`、`build`）時，**一律用工具**，不要用 shell 跑 CLI。以下說的 `code-mentor collect` 等指令，在工具模式下對應同名工具，參數名稱相同（`--no-worktree` → `noWorktree`、`--include-ignored` → `includeIgnored`、`--keep-cr` → `keepCr`）。
 - 沒有工具時，先試 `code-mentor help`。找不到指令時用 `npx -y @edemilorhea/code-mentor <子指令>`，或 `npm i -g @edemilorhea/code-mentor`。
 - 套件還沒發佈時：`npm i -g <套件資料夾路徑>`。
-- 工作目錄是目前 repo 的 `.code-mentor/`（工具會自動加 `.gitignore`）。
+- 產出位置：`.code-mentor/output/docs/<來源>-<hash>/`，每個分支／MR／range 一個資料夾，裡面有 `diff.json`、`guide.json`、`index.html`、`guide.md`、`diagrams/`（`.code-mentor/` 會自動被 git 忽略）。
+- **工作資料夾以 `collect` 印出的「工作資料夾：」為準**，`guide.json` 一律寫在那裡。不要寫 `.code-mentor/guide.json`（舊版位置，已不使用）。
+- 同一個來源再跑 `collect` 預設沿用並覆蓋那個資料夾（`diff.json` 更新、`guide.json` 沿用、`build` 覆蓋報告），不要問使用者。只有使用者說「開新副本」「另存一份」「不要蓋掉」時才加 `--new`（工具 `new: true`），會另開 `-2`、`-3`。
+- `show`／`check`／`build`／`serve` 預設用最近一次 `collect` 的資料夾。同一個 repo 可能有別的工作階段在 collect，所以工具模式下呼叫時都帶上 `dir`（填 collect 回報的路徑），並確認 `check`／`build` 印出的工作資料夾正確。
 
 ## 2. 選擇比較範圍
 
@@ -179,14 +182,14 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
 1. `code-mentor collect [選項]`：讀印出的表格（id、狀態、+/−、旗標 gen／large、路徑、hunk 數）。`collect` 已停用 Git 的外部 textconv；二進位檔仍列在清單，不會冒充文字 diff。
 2. 先把**所有檔案**按情境歸類，列出核心程式、接線、產生檔與其他變更。大型分支先確定每個檔案的去向，再深入閱讀；不要先把整份 `diff.json` 或大量原始檔倒進對話。
 3. `code-mentor show <fileId|hunkId|path>`：優先看核心流程、跨檔接線、重要行為差異，以及無法判斷作用的 hunk。行號是新檔行號；diff 看不懂時才讀相應原始碼。已讀過的內容不要重讀。
-4. 依第 5 節規則寫 `.code-mentor/guide.json`，寫哪些欄位照第 0.5 節的等級，並填 `depth`。每個檔案都要有具體去向；篇幅按變更的影響分配，不按 hunk 數平均分配。
+4. 依第 5 節規則寫工作資料夾裡的 `guide.json`，寫哪些欄位照第 0.5 節的等級，並填 `depth`。每個檔案都要有具體去向；篇幅按變更的影響分配，不按 hunk 數平均分配。
 5. 只有 `教學` 等級：挑出含決策、轉換或規則的核心方法，填 `logic`（第 5 節「邏輯導讀」）。沒有這類方法（純接線、設定）時可以不填。
 6. `code-mentor check`：修到 0 個錯誤；它只檢查格式與覆蓋，不代表講解內容正確。抽查主要情境、產生檔說明與行註解，刪除套版或沒有證據的說法。
-7. `code-mentor build`：產生 `.code-mentor/out/index.html` 與 `guide.md`。
+7. `code-mentor build`：在工作資料夾產生 `index.html` 與 `guide.md`（覆蓋上一次的）。
 8. 告訴使用者 HTML 路徑並開啟它（Windows `start`、macOS `open`、Linux `xdg-open`）。
 
 **即時預覽（只在使用者要求時）**：使用者說「邊寫邊看」「開 serve」「即時預覽」才啟動 `code-mentor serve`，不要自己預設開。
-- `serve` 是常駐程序，絕對不要在前景執行（會卡住整個工作階段）。Windows 用 `Start-Process -PassThru -WindowStyle Hidden code-mentor -ArgumentList serve` 並記下 PID；macOS/Linux 用 `nohup code-mentor serve > .code-mentor/serve.log 2>&1 &` 並記下 `$!`。
+- `serve` 是常駐程序，絕對不要在前景執行（會卡住整個工作階段）。Windows 用 `Start-Process -PassThru -WindowStyle Hidden code-mentor -ArgumentList serve` 並記下 PID；macOS/Linux 用 `nohup code-mentor serve > .code-mentor/serve.log 2>&1 &`（serve 啟動時固定在當下的工作資料夾；換分支 collect 後要看新分支，就停掉舊的再開一個） 並記下 `$!`。
 - 啟動前先檢查 4173 是否已有 code-mentor serve 在跑，有就沿用，不要重複開。啟動後用有時限的請求確認 `http://127.0.0.1:<port>/` 回應 200，再把網址給使用者。
 - 開著 serve 時，每次存 `guide.json` 會自動重建，**不必再跑 `build`**；交付前仍要跑 `check` 修到 0 錯誤，並跑一次 `build` 留下正式檔案。
 - 結束工作或使用者說停止時，只結束你記下的那個 PID；不要殺任何沒確認過的程序。

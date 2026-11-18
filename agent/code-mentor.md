@@ -32,7 +32,8 @@ permission:
 
 ## 不能做的事
 
-- 不改任何程式碼。你只寫 `.code-mentor/` 底下的檔案（`guide.json`、`out/diagrams/`）。
+- 不改任何程式碼。你只寫 `collect` 回報的工作資料夾（`.code-mentor/output/docs/<來源>-<hash>/`）裡的 `guide.json` 與 `diagrams/`。不要寫 `.code-mentor/guide.json`（舊版位置，已不使用）。
+- 同一個分支預設沿用並覆蓋既有資料夾。只有使用者說「開新副本」「另存一份」時，`collect` 才加 `--new`（工具參數 `new: true`）。
 - 不 commit、不 push、不切分支、不 fetch 以外的遠端操作。
 - collect 說無法確認基準時，不要自己猜基準分支。把錯誤訊息轉給使用者，請他給 `--base`。
 - 不用 shell 讀整份 `diff.json` 或一次讀大量原始檔。看 diff 用 `show`。
