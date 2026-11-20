@@ -60,12 +60,80 @@ function head() {
   if (G.summary) s += '<div class="lead">' + inl(G.summary) + '</div>';
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
-  s += '<div class="hbar"><span class="meta">全域顯示</span><span class="seg" id="gseg"><button type="button" data-m="inline">單欄</button><button type="button" data-m="sbs">並排</button></span><span class="seg" id="fseg"><button type="button" data-f="0">重點</button><button type="button" data-f="1">完整</button></span>' + (FMT_TOTAL ? '<label class="chk" title="格式化差異：只改了換行、縮排、空白、單雙引號或結尾逗號的行。不勾選時這些行會折起來。"><input type="checkbox" id="fmtck"' + (VIEW.fmt ? ' checked' : '') + '>顯示格式化差異（' + FMT_TOTAL + ' 行）</label>' : '') + '<button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div></header>';
+  s += '</header>';
   s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
   return s;
 }
-function syncSeg() { Array.prototype.forEach.call(document.querySelectorAll('#gseg button'), function (b) { b.setAttribute('aria-pressed', b.dataset.m === VIEW.mode ? 'true' : 'false'); });
-  Array.prototype.forEach.call(document.querySelectorAll('#fseg button'), function (b) { b.setAttribute('aria-pressed', (b.dataset.f === '1') === VIEW.full ? 'true' : 'false'); }); }
+// ---- display settings panel (button at the bottom of the sidebar) ----
+// text width: 'fill' = prose as wide as the diffs, 'read' = a readable measure
+var TEXTW = lsGet('dg.textw', '') === 'read' ? 'read' : 'fill';
+function applyTextW() { document.documentElement.classList.toggle('text-fill', TEXTW === 'fill'); }
+applyTextW();
+function sw(id, on, text, tip) {
+  return '<label class="sw"' + (tip ? ' title="' + h(tip) + '"' : '') + '><span class="tx">' + text + '</span><input type="checkbox" role="switch" id="' + id + '"' + (on ? ' checked' : '') + '><i aria-hidden="true"></i></label>';
+}
+// a − value + stepper; clicking the value resets it
+function sz(k, text, val, tip) {
+  return '<div class="sz" title="' + h(tip) + '"><span>' + text + '</span><span class="ctl"><button type="button" data-sz="' + k + '" data-d="-1" aria-label="' + text + '變小">−</button><button type="button" class="v" data-sz="' + k + '" data-d="0" title="點一下還原">' + val + '</button><button type="button" data-sz="' + k + '" data-d="1" aria-label="' + text + '變大">+</button></span></div>';
+}
+document.addEventListener('click', function (e) {
+  var t = e.target.closest && e.target.closest('[data-sz]'); if (!t) return;
+  var d = +t.dataset.d;
+  if (t.dataset.sz === 'ui') setUi(d ? UI + d * 0.05 : 1); else setCodeFs(d ? CODEFS + d : 14);
+  document.getElementById('dpnl').innerHTML = panelHtml();
+});
+function panelHtml() {
+  return '<div class="ph">Diff</div>'
+    + sw('set-sbs', VIEW.mode === 'sbs', '並排顯示', '關閉時為單欄')
+    + sw('set-full', VIEW.full, '顯示完整檔案', '關閉時只顯示註解附近的重點')
+    + (FMT_TOTAL ? sw('fmtck', VIEW.hideFmt, '隱藏格式化差異 <span class="n">' + FMT_TOTAL + ' 行</span>', '只改了換行、縮排、空白、單雙引號或結尾逗號的行不顯示；整段或整個檔案都是格式化時一起隱藏。有註解的地方不隱藏。') : '')
+    + '<div class="ph">文字大小</div>'
+    + sz('ui', '介面文字', Math.round(UI * 100) + '%', '標題、說明、側欄、按鈕；不含程式碼')
+    + sz('code', '所有程式碼', CODEFS + 'px', '一次調整所有 diff 的字級；工具列的 A− A+ 只調整單一檔案')
+    + '<div class="ph">版面</div>'
+    + sw('set-tb', VIEW.tb === 'compact', '精簡工具列', '底部浮動工具列只顯示符號，滑鼠停留看說明')
+    + sw('set-textw', TEXTW === 'fill', '文字填滿寬度', '關閉時內容置中，最寬 1240px')
+    + '<div class="pb"><button type="button" data-all="close">全部收合</button><button type="button" data-all="open">全部展開</button></div>';
+}
+function syncSeg() { var p = document.getElementById('dpnl'); if (p && !p.hidden) p.innerHTML = panelHtml(); }
+function setPanel(open) {
+  var p = document.getElementById('dpnl'), b = document.querySelector('[data-ui=set]'); if (!p) return;
+  if (open) p.innerHTML = panelHtml();
+  p.hidden = !open; b.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+document.addEventListener('click', function (e) {
+  var t = e.target, set = document.getElementById('dset'); if (!set) return;
+  if (t.closest && t.closest('[data-ui=set]')) setPanel(document.getElementById('dpnl').hidden);
+  else if (!set.contains(t)) setPanel(false);
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setPanel(false); });
+document.addEventListener('change', function (e) {
+  var t = e.target, v = t.checked;
+  if (t.id === 'set-sbs') setGlobalMode(v ? 'sbs' : 'inline');
+  else if (t.id === 'set-full') {
+    if (v && !window.confirm('所有已展開的區塊都會改成顯示完整檔案，長檔案會讓頁面變長、變慢。要繼續嗎？')) { t.checked = false; return; }
+    setGlobalFull(v);
+  } else if (t.id === 'set-tb') { VIEW.tb = v ? 'compact' : 'full'; lsSet('dg.tb', v ? 'compact' : ''); window.dispatchEvent(new Event('resize')); }
+  else if (t.id === 'set-textw') { TEXTW = v ? 'fill' : 'read'; lsSet('dg.textw', v ? '' : 'read'); applyTextW(); }
+});
+
+// ---- file labels: the file name, plus as many parent folders as it takes to tell same-named files apart ----
+var FLABEL = (function () {
+  var out = {}, segs = {}, depth = {};
+  files.forEach(function (f) { segs[f.id] = f.path.split('/'); depth[f.id] = 1; });
+  for (var round = 0; round < 50; round++) {
+    var seen = {}, clash = false;
+    files.forEach(function (f) { var k = segs[f.id].slice(-depth[f.id]).join('/'); (seen[k] = seen[k] || []).push(f); });
+    Object.keys(seen).forEach(function (k) {
+      if (seen[k].length < 2) return;
+      seen[k].forEach(function (f) { if (depth[f.id] < segs[f.id].length) { depth[f.id]++; clash = true; } });
+    });
+    if (!clash) break;
+  }
+  files.forEach(function (f) { var s = segs[f.id], d = depth[f.id]; out[f.id] = { dir: s.slice(-d, -1).join('/'), name: s[s.length - 1] }; });
+  return out;
+})();
+function fileLabel(f) { var l = FLABEL[f.id]; return (l.dir ? '<span class="pd">' + h(l.dir) + '/</span>' : '') + h(l.name); }
 function stationCard(u, nums, sc) {
   var s = u.s, d = document.createElement('section'), num = nums ? nums[s.id] : '';
   d.className = 'card'; d.id = (u.mech ? 'm-' : 's-') + s.id;
@@ -218,15 +286,15 @@ function viewFiles() {
     var dir = FSORT === 'size' ? null : dirOf(f.path);
     if (dir !== null && dir !== lastDir) {
       var dh = document.createElement('div'); dh.className = 'dir'; dh.textContent = dir; c.appendChild(dh); lastDir = dir;
-      toc += '<div class="grp" title="' + h(dir) + '">' + h(dir.split('/').slice(-2).join('/')) + '</div>';
+      toc += '<div class="grp" title="' + h(dir) + '">' + h(dir).replace(/\//g, '/<wbr>') + '</div>';
     } else if (dir === null && !toc) toc = '<div class="grp">檔案</div>';
-    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '">' + h(f.path.slice(f.path.lastIndexOf('/') + 1)) + '</a>';
+    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '">' + fileLabel(f) + '</a>';
     var refs = refsOf(f), g = (G.files || {})[f.path] || {};
     var wrap = document.createElement('div'); wrap.id = 'file-' + f.id;
     var tot = f.additions + f.deletions, w = Math.max(6, Math.round(90 * tot / max)), aw = tot ? Math.round(100 * f.additions / tot) : 0;
     var flags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (!refs.length && !g.skip ? '<span class="flag">未提及</span>' : '') + (g.skip ? '<span class="flag">略過</span>' : '');
     var row = document.createElement('div'); row.className = 'frow';
-    row.innerHTML = '<span class="nm">' + h(FSORT === 'size' ? f.path : f.path.slice(f.path.lastIndexOf('/') + 1)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
+    row.innerHTML = '<span class="nm">' + (FSORT === 'size' ? h(f.path) : fileLabel(f)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
       + '<span class="refs">' + refs.map(function (u) { return '<a href="#' + (u.mech ? 'mech' : 'scenario') + '" data-jump="' + (u.mech ? 'm-' : 's-') + h(u.s.id) + '">' + h(u.s.title || u.s.id) + '</a>'; }).join('') + '</span>' + (g.summary ? '<span class="meta" style="flex-basis:100%">' + inl(g.summary) + '</span>' : '');
     wrap.appendChild(row);
     var holder = document.createElement('div'); wrap.appendChild(holder);
@@ -309,8 +377,8 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all],#gseg button,#fseg button') : null; if (!t) return;
-  if (t.dataset.all) toggleAll(t.dataset.all === 'open');
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all]') : null; if (!t) return;
+  if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
   else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { var el = document.getElementById(gid); if (el) el.scrollIntoView(); }, 0); }
   else if (t.dataset.jump) {
@@ -321,12 +389,6 @@ document.addEventListener('click', function (e) {
       if (tab !== cur) { location.hash = '#' + tab; setTimeout(function () { var el = document.getElementById(id); if (el) el.scrollIntoView(); }, 0); }
       else { var el = document.getElementById(id); if (el) el.scrollIntoView(); }
     }
-  } else if (t.dataset.m) { setGlobalMode(t.dataset.m); syncSeg(); }
-  else if (t.dataset.f) {
-    var full = t.dataset.f === '1';
-    if (full === VIEW.full) return;
-    if (full && !window.confirm('所有已展開的區塊都會改成顯示完整檔案，長檔案會讓頁面變長、變慢。要繼續嗎？')) return;
-    setGlobalFull(full); syncSeg();
   }
 });
 $main.innerHTML = head(); syncSeg();

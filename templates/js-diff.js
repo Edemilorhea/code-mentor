@@ -1,7 +1,8 @@
 // ---- persisted view state ----
 function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage may be blocked */ } }
-var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full: false, fmt: lsGet('dg.fmt', '') === '1' };
+// tb: floating toolbar labels, 'full' text or 'compact' symbols
+var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full: false, hideFmt: lsGet('dg.hidefmt', '') === '1', tb: lsGet('dg.tb', '') === 'compact' ? 'compact' : 'full' };
 (function () {
   var w = parseFloat(lsGet('dg.w', '')), s = parseFloat(lsGet('dg.split', ''));
   if (w >= 640) document.documentElement.style.setProperty('--diff-width', w + 'px');
@@ -11,18 +12,28 @@ var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full
 (function () {
   var root = document.documentElement;
   var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  // icons: sidebar with an arrow pointing where it will go (close = left, open = right); the theme button shows the theme it switches to
+  var svg = function (d) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>'; };
+  var PANEL = '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>';
+  var ICON = {
+    close: svg(PANEL + '<path d="M16 9l-3 3 3 3"/>'), open: svg(PANEL + '<path d="M13 9l3 3-3 3"/>'),
+    moon: svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>')
+  };
+  function label(b, icon, text) { b.innerHTML = icon; b.title = text; b.setAttribute('aria-label', text); }
   function apply() {
     var theme = lsGet('dg.theme', sys) === 'light' ? 'light' : 'dark', off = lsGet('dg.toc', '') === 'off';
     root.dataset.theme = theme; root.classList.toggle('toc-off', off);
-    var b = document.querySelector('[data-ui=theme]'); if (b) b.textContent = theme === 'light' ? '深色' : '淺色';
-    b = document.querySelector('[data-ui=toc]'); if (b) b.textContent = off ? '顯示側欄' : '收合側欄';
+    var b = document.querySelector('[data-ui=theme]'); if (b) label(b, theme === 'light' ? ICON.moon : ICON.sun, theme === 'light' ? '切換成深色' : '切換成淺色');
+    b = document.querySelector('[data-ui=toc]'); if (b) label(b, off ? ICON.open : ICON.close, off ? '顯示側欄' : '收合側欄');
   }
   apply();
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-ui]'); if (!t) return;
     var u = t.dataset.ui;
     if (u === 'theme') lsSet('dg.theme', root.dataset.theme === 'light' ? 'dark' : 'light');
-    else lsSet('dg.toc', root.classList.contains('toc-off') ? '' : 'off');
+    else if (u === 'toc') lsSet('dg.toc', root.classList.contains('toc-off') ? '' : 'off');
+    else return;
     apply();
   });
 })();
@@ -38,7 +49,7 @@ function resolve(ref) {
   if (hunkById[ref]) return { file: hunkById[ref][0], hunk: hunkById[ref][1] };
   var f = byId[ref] || byPath[ref]; return f ? { file: f } : null;
 }
-// ---- format-only changes: marked once per page load (markFormat, lib/sbs.mjs), folded unless VIEW.fmt ----
+// ---- format-only changes: marked once per page load (markFormat, lib/sbs.mjs), removed from view when VIEW.hideFmt ----
 // Only languages where whitespace outside strings has no meaning. FMT_Q: ' and " are the same string quote.
 var FMT_Q = /\.(m?[jt]sx?|cjs|mts|cts|css|scss|less)$/i, FMT_N = /\.(cs|java|kt|go|rs|c|h|cc|cpp|hpp|swift|php|jsonc?)$/i;
 var FMT_TOTAL = 0;
@@ -113,41 +124,29 @@ function rowKept(r, cr) {
   if (r.above.L.length || r.above.R.length || r.below.L.length || r.below.R.length) return true;
   return inRanges(r.l && r.l.o, cr.o) || inRanges(r.r && r.r.n, cr.n);
 }
-// a format-only row can be folded unless a note sits on it or covers it
-function fmtRow(r) { return r.fmt && !r.inL && !r.inR && !r.above.L.length && !r.above.R.length && !r.below.L.length && !r.below.R.length; }
-// b: block (for unfolded state); focus: fold rows outside annotated ranges; hideFmt: fold format-only rows
+function hasNote(r) { return !!(r.above.L.length || r.above.R.length || r.below.L.length || r.below.R.length); }
+// a format-only row can be hidden unless a note sits on it or covers it
+function fmtRow(r) { return r.fmt && !r.inL && !r.inR && !hasNote(r); }
+// b: block (for unfolded state); focus: fold rows outside annotated ranges;
+// hideFmt: remove format-only rows, and the whole hunk (header included) when nothing else is left to read
 function hunkHtml(f, hk, ns, mode, lang, b, focus, hideFmt) {
   var rows = pairRows(hk, ns, mode), o = ['<tr class="h"><td colspan="4">' + h(hk.header) + '</td></tr>'];
+  if (hideFmt) {
+    rows = rows.filter(function (r) { return !fmtRow(r); });
+    if (!rows.some(function (r) { return r.l !== r.r || hasNote(r); })) return '';
+  }
   var cr = focus ? coreRanges(ns) : null, i = 0;
   function emit(r) {
     o.push(mode === 'sbs' ? noteRowSbs(r.above.L, r.above.R) : noteRowInline(r.above.L.concat(r.above.R)));
     o.push(mode === 'sbs' ? rowSbs(r, lang) : rowInline(r, lang));
     o.push(mode === 'sbs' ? noteRowSbs(r.below.L, r.below.R) : noteRowInline(r.below.L.concat(r.below.R)));
   }
-  // one fold bar for rows i..j-1; the label says why they are folded
-  function bar(key, open, shut) {
-    if (b._unfold[key]) { o.push('<tr class="gap"><td colspan="4"><button type="button" class="un" data-refold="' + h(key) + '">⋮ ' + open + '</button></td></tr>'); return true; }
-    o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ ' + shut + '，點開</button></td></tr>');
-    return false;
-  }
-  // changed lines in a set of rows (a side-by-side row can hold an old and a new line), so the count does not depend on the mode
-  function nLines(rs) { return rs.reduce(function (a, r) { return a + (r.l === r.r ? 0 : (r.l ? 1 : 0) + (r.r ? 1 : 0)); }, 0); }
-  // every changed row of this hunk is format-only: fold the whole hunk behind one bar
-  var changed = rows.filter(function (r) { return r.l !== r.r; });
-  if (hideFmt && changed.length && rows.every(function (r) { return r.l === r.r ? !r.above.L.length && !r.above.R.length && !r.below.L.length && !r.below.R.length : fmtRow(r); })) {
-    if (bar(hk.id + ':fmt', '收合這段格式化差異', '這段只有格式化差異（' + nLines(changed) + ' 行）')) rows.forEach(emit);
-    return o.join('');
-  }
-  // why a row is folded: 'n' = outside the annotated ranges (focus view), 'f' = format-only change, '' = shown
-  function why(r) { return cr && !rowKept(r, cr) ? 'n' : hideFmt && fmtRow(r) ? 'f' : ''; }
   while (i < rows.length) {
-    var w = why(rows[i]);
-    if (!w) { emit(rows[i++]); continue; }
-    var j = i; while (j < rows.length && why(rows[j]) === w) j++;
-    var n = j - i, nf = nLines(rows.slice(i, j)), shown = w === 'n'
-      ? bar(hk.id + ':' + i, '收合這 ' + n + ' 行', '略過 ' + n + ' 行（不在註解範圍）')
-      : bar(hk.id + ':f' + i, '收合這 ' + nf + ' 行格式化差異', '略過 ' + nf + ' 行格式化差異');
-    if (shown) rows.slice(i, j).forEach(emit);
+    if (!cr || rowKept(rows[i], cr)) { emit(rows[i++]); continue; }
+    var j = i; while (j < rows.length && !rowKept(rows[j], cr)) j++;
+    var key = hk.id + ':' + i;
+    if (b._unfold[key]) { o.push('<tr class="gap"><td colspan="4"><button type="button" class="un" data-refold="' + h(key) + '">⋮ 收合這 ' + (j - i) + ' 行</button></td></tr>'); rows.slice(i, j).forEach(emit); }
+    else o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ 略過 ' + (j - i) + ' 行（不在註解範圍），點開</button></td></tr>');
     i = j;
   }
   return o.join('');
@@ -218,7 +217,7 @@ function fvLabel(b) {
   return fullOf(b) ? '只看重點' : '看完整檔案' + (f.content || f.status === 'added' ? '' : '（僅 diff）');
 }
 function fillBlock(b, force) {
-  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '') + (VIEW.fmt ? ':fmt' : '');
+  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '') + (VIEW.hideFmt ? ':nofmt' : '');
   if (!force && b.dataset.done === '1' && b.dataset.rmode === key) return;
   var f = byId[b.dataset.file], hk = b.dataset.hunk && !full ? hunkById[b.dataset.hunk][1] : null, hs = hk ? [hk] : f.hunks, lang = langOf(f.path), ns = b._notes || [], body = '';
   // a station's notes may target other files: only this file's own line notes switch on focus mode
@@ -233,8 +232,8 @@ function fillBlock(b, force) {
     };
     hs.forEach(function (x, i) {
       if (whole) body += gap(i);
-      // the whole-file view shows every line of the file, so it never folds format-only rows
-      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang, b, focus, !full && !VIEW.fmt);
+      // the whole-file view shows every line of the file, so it never hides format-only rows
+      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang, b, focus, !full && VIEW.hideFmt);
     });
     if (whole) body += gap(hs.length);
   }
@@ -253,7 +252,20 @@ var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function 
 var BLOCKS = [];
 // per-file code font size (px) set from the toolbar; survives re-render/route changes, not page reload
 var FS = {};
-function fsOf(b) { return FS[b.dataset.file] || 14; }
+// page-wide sizes from the settings panel: CODEFS = default code px (a file's own size overrides it), UI = interface text scale
+var CODEFS = Math.min(24, Math.max(10, parseInt(lsGet('dg.codefs', ''), 10) || 14));
+var UI = Math.min(1.4, Math.max(0.9, parseFloat(lsGet('dg.ui', '')) || 1));
+function applySizes() { var st = document.documentElement.style; st.setProperty('--fs-code', CODEFS + 'px'); st.setProperty('--ui', String(UI)); }
+applySizes();
+function fsOf(b) { return FS[b.dataset.file] || CODEFS; }
+// all code at once: drops every per-file size so the new default applies everywhere
+function setCodeFs(v) {
+  CODEFS = Math.min(24, Math.max(10, v)); lsSet('dg.codefs', CODEFS === 14 ? '' : String(CODEFS));
+  Object.keys(FS).forEach(function (k) { delete FS[k]; });
+  BLOCKS.forEach(function (b) { b.style.removeProperty('--fs-code'); });
+  applySizes(); window.dispatchEvent(new Event('resize'));
+}
+function setUi(v) { UI = Math.round(Math.min(1.4, Math.max(0.9, v)) * 100) / 100; lsSet('dg.ui', UI === 1 ? '' : String(UI)); applySizes(); }
 function mkBlock(ref, notes, opts) {
   var r = resolve(ref); if (!r) return null;
   var f = r.file, g = (D.guideFiles || {})[f.path] || (G.files || {})[f.path] || {}, d = document.createElement('div');
@@ -282,6 +294,7 @@ function mkBlock(ref, notes, opts) {
     else gapClick(d, bt);
   });
   if (FS[f.id]) d.style.setProperty('--fs-code', FS[f.id] + 'px');
+  applyFmtHide(d);
   if (open) { if (io) io.observe(d); else fillBlock(d); }
   BLOCKS.push(d);
   return d;
@@ -299,11 +312,21 @@ function setGlobalFull(v) {
     if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') { b.dataset.done = '0'; if (io) io.observe(b); else fillBlock(b, true); }
   });
 }
-// Global "show format-only changes" checkbox (rendered in the page header only when FMT_TOTAL > 0).
+// A block holds nothing but formatting: every changed line it shows is format-only and no note of the block sits in this file.
+function fmtOnlyBlock(b) {
+  var f = byId[b.dataset.file], hk = b.dataset.hunk ? hunkById[b.dataset.hunk][1] : null;
+  if (!f._fmt) return false;
+  if ((b._notes || []).some(function (n) { var hb = hunkById[n.hunk]; return n.hunk === f.id || n.hunk === f.path || (hb && hb[0] === f); })) return false;
+  if (!hk) return f._fmt === f.additions + f.deletions;
+  return hk.lines.every(function (l) { return l.t === ' ' || l.f; });
+}
+// with "hide format-only changes" on, a block that holds nothing else disappears from the page
+function applyFmtHide(b) { b.style.display = VIEW.hideFmt && fmtOnlyBlock(b) ? 'none' : ''; }
+// Global "hide format-only changes" checkbox (rendered in the page header only when FMT_TOTAL > 0).
 function setGlobalFmt(v) {
-  VIEW.fmt = v; lsSet('dg.fmt', v ? '1' : '');
+  VIEW.hideFmt = v; lsSet('dg.hidefmt', v ? '1' : '');
   BLOCKS.forEach(function (b) {
-    b._unfold = {};
+    b._unfold = {}; applyFmtHide(b);
     if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') { b.dataset.done = '0'; if (io) io.observe(b); else fillBlock(b, true); }
   });
 }
@@ -401,11 +424,19 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     var b = pick();
     if (b !== cur) { if (cur) cur.classList.remove('cur'); cur = b; if (cur) cur.classList.add('cur'); }
     tb.hidden = !cur; if (!cur) return;
-    var f = byId[cur.dataset.file], open = cur.dataset.open === '1';
-    q('.nm').textContent = f.path; q('.nm').title = f.path;
-    q('[data-tb=open]').textContent = open ? '收合檔案' : '展開檔案';
-    q('[data-tb=mode]').textContent = modeOf(cur) === 'sbs' ? '改單欄' : '改並排';
-    q('[data-tb=full]').textContent = fullOf(cur) ? '只看重點' : '看完整';
+    var f = byId[cur.dataset.file], open = cur.dataset.open === '1', C = VIEW.tb === 'compact';
+    tb.classList.toggle('compact', C);
+    // the whole file name, plus the folders that tell same-named files apart (FLABEL, js-app.js)
+    var fl = typeof FLABEL !== 'undefined' && FLABEL[f.id];
+    q('.nm').textContent = fl ? (fl.dir ? fl.dir + '/' : '') + fl.name : f.path; q('.nm').title = f.path;
+    // full text, or a symbol in compact mode; the tooltip always carries the full meaning
+    var lab = function (a, full, short) { var el = q('[data-tb=' + a + ']'); if (el.dataset.tip == null) el.dataset.tip = el.title || ''; el.textContent = C ? short : full; el.title = el.dataset.tip || full; };
+    lab('open', open ? '收合檔案' : '展開檔案', open ? '▾' : '▸');
+    lab('mode', modeOf(cur) === 'sbs' ? '改單欄' : '改並排', modeOf(cur) === 'sbs' ? '▤' : '◫');
+    lab('full', fullOf(cur) ? '只看重點' : '看完整', fullOf(cur) ? '◎' : '▣');
+    lab('wrap', wrapOf(cur) ? '不換行' : '自動換行', wrapOf(cur) ? '→' : '↩');
+    lab('u20', '↑20', '↑'); lab('uall', '↑全部', '⇈'); lab('d20', '↓20', '↓'); lab('dall', '↓全部', '⇊');
+    lab('c20', '收回20', '−'); lab('call', '全部收回', '⊖');
     var up = !!gapRow(cur, -1), dn = !!gapRow(cur, 1);
     q('[data-tb=u20]').disabled = q('[data-tb=uall]').disabled = !up;
     q('[data-tb=d20]').disabled = q('[data-tb=dall]').disabled = !dn;
@@ -413,13 +444,12 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     q('[data-tb=c20]').disabled = !un;
     q('[data-tb=call]').disabled = !(un || Object.keys(cur._unfold || {}).length);
     q('[data-tb=fsv]').textContent = fsOf(cur) + 'px';
-    q('[data-tb=wrap]').textContent = wrapOf(cur) ? '不換行' : '自動換行';
   }
   function setFs(v) {
     var id = cur.dataset.file;
-    if (v === 14) delete FS[id]; else FS[id] = v;
+    if (v === CODEFS) delete FS[id]; else FS[id] = v;
     // the same file can appear in several stations: resize every block of this file
-    BLOCKS.forEach(function (b) { if (b.dataset.file === id) { if (v === 14) b.style.removeProperty('--fs-code'); else b.style.setProperty('--fs-code', v + 'px'); } });
+    BLOCKS.forEach(function (b) { if (b.dataset.file === id) { if (v === CODEFS) b.style.removeProperty('--fs-code'); else b.style.setProperty('--fs-code', v + 'px'); } });
   }
   function later() { if (!raf) raf = requestAnimationFrame(update); }
   tb.addEventListener('click', function (e) {
@@ -429,7 +459,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
     else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); }
-    else if (a === 'fsv') setFs(14);
+    else if (a === 'fsv') setFs(CODEFS);
     else if (a === 'fs-' || a === 'fs+') setFs(Math.min(24, Math.max(10, fsOf(cur) + (a === 'fs+' ? 1 : -1))));
     else if (a === 'u20' || a === 'uall') return expand(-1, a === 'uall');
     else if (a === 'd20' || a === 'dall') return expand(1, a === 'dall');
