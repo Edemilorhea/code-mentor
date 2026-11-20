@@ -136,6 +136,8 @@ table.df tr.gap button:hover{text-decoration:underline}
 table.df tr.gap button.un{color:var(--faint)}
 .hbar>button{appearance:none;font:500 12.5px/1 var(--font-sans);height:34px;padding:0 12px;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);border-radius:999px;cursor:pointer}
 .hbar>button:hover{background:var(--sunken);color:var(--fg)}
+.hbar .chk{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--font-sans);color:var(--muted);cursor:pointer}
+.hbar .chk input{margin:0;accent-color:var(--accent)}
 .dg-toc a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dg-toc .grp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:12px}
 table.df tr.hit td{box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--accent-fill) 22%,transparent)}

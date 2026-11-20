@@ -1,7 +1,7 @@
 // ---- persisted view state ----
 function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage may be blocked */ } }
-var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full: false };
+var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full: false, fmt: lsGet('dg.fmt', '') === '1' };
 (function () {
   var w = parseFloat(lsGet('dg.w', '')), s = parseFloat(lsGet('dg.split', ''));
   if (w >= 640) document.documentElement.style.setProperty('--diff-width', w + 'px');
@@ -38,6 +38,16 @@ function resolve(ref) {
   if (hunkById[ref]) return { file: hunkById[ref][0], hunk: hunkById[ref][1] };
   var f = byId[ref] || byPath[ref]; return f ? { file: f } : null;
 }
+// ---- format-only changes: marked once per page load (markFormat, lib/sbs.mjs), folded unless VIEW.fmt ----
+// Only languages where whitespace outside strings has no meaning. FMT_Q: ' and " are the same string quote.
+var FMT_Q = /\.(m?[jt]sx?|cjs|mts|cts|css|scss|less)$/i, FMT_N = /\.(cs|java|kt|go|rs|c|h|cc|cpp|hpp|swift|php|jsonc?)$/i;
+var FMT_TOTAL = 0;
+files.forEach(function (f) {
+  f._fmt = 0;
+  if (f.generated || f.binary || !(FMT_Q.test(f.path) || FMT_N.test(f.path))) return;
+  f.hunks.forEach(function (x) { f._fmt += markFormat(x.lines, FMT_Q.test(f.path)); });
+  FMT_TOTAL += f._fmt;
+});
 var KL = { why: '為什麼', good: '好處', risk: '風險', bug: '問題', info: '說明', what: '改了什麼', how: '怎麼改', syntax: '語法／用法' };
 
 // ---- notes ----
@@ -103,8 +113,10 @@ function rowKept(r, cr) {
   if (r.above.L.length || r.above.R.length || r.below.L.length || r.below.R.length) return true;
   return inRanges(r.l && r.l.o, cr.o) || inRanges(r.r && r.r.n, cr.n);
 }
-// b: block (for unfolded state); focus: fold rows outside annotated ranges
-function hunkHtml(f, hk, ns, mode, lang, b, focus) {
+// a format-only row can be folded unless a note sits on it or covers it
+function fmtRow(r) { return r.fmt && !r.inL && !r.inR && !r.above.L.length && !r.above.R.length && !r.below.L.length && !r.below.R.length; }
+// b: block (for unfolded state); focus: fold rows outside annotated ranges; hideFmt: fold format-only rows
+function hunkHtml(f, hk, ns, mode, lang, b, focus, hideFmt) {
   var rows = pairRows(hk, ns, mode), o = ['<tr class="h"><td colspan="4">' + h(hk.header) + '</td></tr>'];
   var cr = focus ? coreRanges(ns) : null, i = 0;
   function emit(r) {
@@ -112,12 +124,30 @@ function hunkHtml(f, hk, ns, mode, lang, b, focus) {
     o.push(mode === 'sbs' ? rowSbs(r, lang) : rowInline(r, lang));
     o.push(mode === 'sbs' ? noteRowSbs(r.below.L, r.below.R) : noteRowInline(r.below.L.concat(r.below.R)));
   }
+  // one fold bar for rows i..j-1; the label says why they are folded
+  function bar(key, open, shut) {
+    if (b._unfold[key]) { o.push('<tr class="gap"><td colspan="4"><button type="button" class="un" data-refold="' + h(key) + '">⋮ ' + open + '</button></td></tr>'); return true; }
+    o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ ' + shut + '，點開</button></td></tr>');
+    return false;
+  }
+  // changed lines in a set of rows (a side-by-side row can hold an old and a new line), so the count does not depend on the mode
+  function nLines(rs) { return rs.reduce(function (a, r) { return a + (r.l === r.r ? 0 : (r.l ? 1 : 0) + (r.r ? 1 : 0)); }, 0); }
+  // every changed row of this hunk is format-only: fold the whole hunk behind one bar
+  var changed = rows.filter(function (r) { return r.l !== r.r; });
+  if (hideFmt && changed.length && rows.every(function (r) { return r.l === r.r ? !r.above.L.length && !r.above.R.length && !r.below.L.length && !r.below.R.length : fmtRow(r); })) {
+    if (bar(hk.id + ':fmt', '收合這段格式化差異', '這段只有格式化差異（' + nLines(changed) + ' 行）')) rows.forEach(emit);
+    return o.join('');
+  }
+  // why a row is folded: 'n' = outside the annotated ranges (focus view), 'f' = format-only change, '' = shown
+  function why(r) { return cr && !rowKept(r, cr) ? 'n' : hideFmt && fmtRow(r) ? 'f' : ''; }
   while (i < rows.length) {
-    if (!cr || rowKept(rows[i], cr)) { emit(rows[i++]); continue; }
-    var j = i; while (j < rows.length && !rowKept(rows[j], cr)) j++;
-    var key = hk.id + ':' + i;
-    if (b._unfold[key]) { o.push('<tr class="gap"><td colspan="4"><button type="button" class="un" data-refold="' + h(key) + '">⋮ 收合這 ' + (j - i) + ' 行</button></td></tr>'); rows.slice(i, j).forEach(emit); }
-    else o.push('<tr class="gap"><td colspan="4"><button type="button" data-fold="' + h(key) + '">⋯ 略過 ' + (j - i) + ' 行，點開</button></td></tr>');
+    var w = why(rows[i]);
+    if (!w) { emit(rows[i++]); continue; }
+    var j = i; while (j < rows.length && why(rows[j]) === w) j++;
+    var n = j - i, nf = nLines(rows.slice(i, j)), shown = w === 'n'
+      ? bar(hk.id + ':' + i, '收合這 ' + n + ' 行', '略過 ' + n + ' 行（不在註解範圍）')
+      : bar(hk.id + ':f' + i, '收合這 ' + nf + ' 行格式化差異', '略過 ' + nf + ' 行格式化差異');
+    if (shown) rows.slice(i, j).forEach(emit);
     i = j;
   }
   return o.join('');
@@ -188,7 +218,7 @@ function fvLabel(b) {
   return fullOf(b) ? '只看重點' : '看完整檔案' + (f.content || f.status === 'added' ? '' : '（僅 diff）');
 }
 function fillBlock(b, force) {
-  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '');
+  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '') + (VIEW.fmt ? ':fmt' : '');
   if (!force && b.dataset.done === '1' && b.dataset.rmode === key) return;
   var f = byId[b.dataset.file], hk = b.dataset.hunk && !full ? hunkById[b.dataset.hunk][1] : null, hs = hk ? [hk] : f.hunks, lang = langOf(f.path), ns = b._notes || [], body = '';
   // a station's notes may target other files: only this file's own line notes switch on focus mode
@@ -203,7 +233,8 @@ function fillBlock(b, force) {
     };
     hs.forEach(function (x, i) {
       if (whole) body += gap(i);
-      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang, b, focus);
+      // the whole-file view shows every line of the file, so it never folds format-only rows
+      body += hunkHtml(f, x, hunkNoteFilter(ns, f, x), mode, lang, b, focus, !full && !VIEW.fmt);
     });
     if (whole) body += gap(hs.length);
   }
@@ -229,7 +260,7 @@ function mkBlock(ref, notes, opts) {
   d.className = 'blk'; d.dataset.file = f.id; d.dataset.hunk = r.hunk ? r.hunk.id : ''; d._notes = notes || []; d._gaps = {}; d._ov = null; d._fv = null; d._unfold = {};
   var open = !(f.generated && !(opts && opts.forceOpen));
   d.dataset.open = open ? '1' : '0';
-  var tags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '');
+  var tags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (f._fmt && f._fmt === f.additions + f.deletions ? '<span class="flag">僅格式化</span>' : '');
   d.innerHTML = '<div class="fh"><span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
     + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
     + (f.generated && (g.explain || g.summary) ? '<div class="explain">' + (g.summary ? '<b>' + inl(g.summary) + '</b>' : '') + md(g.explain) + '</div>' : '')
@@ -268,6 +299,15 @@ function setGlobalFull(v) {
     if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') { b.dataset.done = '0'; if (io) io.observe(b); else fillBlock(b, true); }
   });
 }
+// Global "show format-only changes" checkbox (rendered in the page header only when FMT_TOTAL > 0).
+function setGlobalFmt(v) {
+  VIEW.fmt = v; lsSet('dg.fmt', v ? '1' : '');
+  BLOCKS.forEach(function (b) {
+    b._unfold = {};
+    if (b.isConnected && b.dataset.open === '1' && b.dataset.done === '1') { b.dataset.done = '0'; if (io) io.observe(b); else fillBlock(b, true); }
+  });
+}
+document.addEventListener('change', function (e) { if (e.target && e.target.id === 'fmtck') setGlobalFmt(e.target.checked); });
 
 // ---- drag: shared width, split ----
 (function () {
