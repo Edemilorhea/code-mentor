@@ -94,17 +94,17 @@ function rowInline(r, lang) {
   var x = r.l || r.r, m = pairMasks(r), cls = x.t === '+' ? 'a' : x.t === '-' ? 'd' : '';
   var mask = m ? (x.t === '-' ? m[0] : m[1]) : null, tint = (r.inL || r.inR) ? ' rg' : '';
   return '<tr class="' + cls + '" data-o="' + (x.o == null ? '' : x.o) + '" data-n="' + (x.n == null ? '' : x.n) + '"><td class="no">' + (x.o == null ? '' : x.o) + '</td><td class="no">' + (x.n == null ? '' : x.n)
-    + '</td><td class="sg">' + (x.t === ' ' ? '' : x.t) + '</td><td class="code' + tint + wrapCls(x) + '">' + cellCode(x, lang, mask, x.t === '-' ? 'wd' : 'wa') + '</td></tr>';
+    + '</td><td class="sg">' + (x.t === ' ' ? '' : x.t) + '</td><td class="code' + tint + wrapCls(x) + '"><span class="sx">' + cellCode(x, lang, mask, x.t === '-' ? 'wd' : 'wa') + '</span></td></tr>';
 }
 function rowSbs(r, lang) {
   var m = pairMasks(r), out = '<tr>';
   if (r.l) {
     var lc = r.l.t === '-' ? 'd' : '';
-    out += '<td class="no ' + lc + '">' + r.l.o + '</td><td class="m ' + lc + (r.inL ? ' rg' : '') + wrapCls(r.l) + '" data-o="' + r.l.o + '">' + cellCode(r.l, lang, m && r.l.t === '-' ? m[0] : null, 'wd') + '</td>';
+    out += '<td class="no ' + lc + '">' + r.l.o + '</td><td class="m ' + lc + (r.inL ? ' rg' : '') + wrapCls(r.l) + '" data-o="' + r.l.o + '"><span class="sx">' + cellCode(r.l, lang, m && r.l.t === '-' ? m[0] : null, 'wd') + '</span></td>';
   } else out += '<td class="no e"></td><td class="m e"></td>';
   if (r.r) {
     var rc = r.r.t === '+' ? 'a' : '';
-    out += '<td class="no ' + rc + '">' + r.r.n + '</td><td class="m ' + rc + (r.inR ? ' rg' : '') + wrapCls(r.r) + '" data-n="' + r.r.n + '">' + cellCode(r.r, lang, m && r.r.t === '+' ? m[1] : null, 'wa') + '</td>';
+    out += '<td class="no ' + rc + '">' + r.r.n + '</td><td class="m ' + rc + (r.inR ? ' rg' : '') + wrapCls(r.r) + '" data-n="' + r.r.n + '"><span class="sx">' + cellCode(r.r, lang, m && r.r.t === '+' ? m[1] : null, 'wa') + '</span></td>';
   } else out += '<td class="no e"></td><td class="m e"></td>';
   return out + '</tr>';
 }
@@ -241,12 +241,44 @@ function fillBlock(b, force) {
   }
   var cg = mode === 'sbs' ? '<colgroup><col style="width:52px"><col class="cm"><col style="width:52px"><col></colgroup>' : '<colgroup><col style="width:52px"><col style="width:52px"><col style="width:20px"><col></colgroup>';
   var bd = b.querySelector('.bd');
-  bd.innerHTML = '<table class="df ' + mode + '">' + cg + body + '</table>' + (mode === 'sbs' ? '<div class="sph" title="拖曳調整左右欄寬，雙擊還原"></div>' : '');
+  bd.innerHTML = '<table class="df ' + mode + '">' + cg + body + '</table>' + (mode === 'sbs' ? '<div class="sph" title="拖曳調整左右欄寬，雙擊還原"></div>' : '')
+    + '<div class="sxb ' + mode + '"><div class="sxl"><i></i></div>' + (mode === 'sbs' ? '<div class="sxr"><i></i></div>' : '') + '</div>';
   b.dataset.done = '1'; b.dataset.rmode = key; b.classList.toggle('wrapall', wrapOf(b));
-  if (bd.clientWidth) b.style.setProperty('--bdw', bd.clientWidth + 'px'); // notes stay within the visible width when code scrolls sideways
+  b.style.removeProperty('--sxl'); b.style.removeProperty('--sxr');
+  sxWatch(b, bd.firstChild);
   var tg = b.querySelector('.tg');
   tg.textContent = '顯示：' + (mode === 'sbs' ? '並排' : '單欄');
   b.querySelector('.fv').textContent = fvLabel(b);
+}
+// ---- no-wrap long lines: code cells clip; each code column (one in single column, left + right side by side) gets its own
+// scrollbar, stuck above the screen bottom, that shifts that column's text sideways (--sxl / --sxr on the block) ----
+var SX = [['.sxl', 'td.code,td.m[data-o]', '--sxl'], ['.sxr', 'td.m[data-n]', '--sxr']];
+function sxFit(b) {
+  var bd = b.querySelector('.bd'), bar = bd && bd.querySelector('.sxb'); if (!bar) return;
+  if (b.dataset.open !== '1' || b.classList.contains('wrapall')) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  var br = bd.getBoundingClientRect(), any = false;
+  SX.forEach(function (s) {
+    var sc = bar.querySelector(s[0]); if (!sc) return;
+    var cells = bd.querySelectorAll(s[1]), w = 0, ref = null;
+    for (var i = 0; i < cells.length; i++) {
+      if (cells[i].classList.contains('wrap')) continue; // >400-char lines always wrap
+      ref = ref || cells[i];
+      var x = cells[i].firstChild; if (x && x.offsetWidth > w) w = x.offsetWidth;
+    }
+    var over = !!ref && w + 16 > ref.clientWidth + 1;
+    sc.style.display = over ? '' : 'none'; any = any || over;
+    if (over) { var r = ref.getBoundingClientRect(); sc.style.left = (r.left - br.left) + 'px'; sc.style.width = r.width + 'px'; sc.firstChild.style.width = (w + 16) + 'px'; }
+    b.style.setProperty(s[2], over ? -sc.scrollLeft + 'px' : '0px');
+  });
+  if (!any) bar.style.display = 'none';
+}
+// re-fit when the column widths change (window, diff width, split drag) or the text size changes
+function sxWatch(b, tbl) {
+  if (!('ResizeObserver' in window)) { sxFit(b); return; }
+  b._sxo = b._sxo || new ResizeObserver(function () { sxFit(b); });
+  b._sxo.disconnect(); b._sxo.observe(tbl);
+  SX.forEach(function (s) { var c = tbl.querySelector(s[1]); if (c) b._sxo.observe(c); });
 }
 var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (es) {
   es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); if (e.target.dataset.open === '1') fillBlock(e.target); } });
@@ -304,6 +336,19 @@ function mkBlock(ref, notes, opts) {
     if (d.dataset.open === '1') keepTop(function () { setOpen(false); }); else setOpen(true);
   });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
+  // the column scrollbars move their column's text; a sideways wheel / trackpad swipe over code drives that column's scrollbar
+  bd.addEventListener('scroll', function (e) {
+    var t = e.target, s = t.classList && (t.classList.contains('sxl') ? '--sxl' : t.classList.contains('sxr') ? '--sxr' : '');
+    if (s) d.style.setProperty(s, -t.scrollLeft + 'px');
+  }, true);
+  bd.addEventListener('wheel', function (e) {
+    var dx = e.deltaX || (e.shiftKey ? e.deltaY : 0), td = dx && !d.classList.contains('wrapall') && e.target.closest && e.target.closest('td.code,td.m');
+    if (!td) return;
+    var sc = bd.querySelector(td.hasAttribute('data-n') ? '.sxr' : '.sxl');
+    if (!sc || sc.style.display === 'none' || sc.scrollWidth <= sc.clientWidth) return;
+    var x0 = sc.scrollLeft; sc.scrollLeft += dx;
+    if (sc.scrollLeft !== x0) e.preventDefault();
+  }, { passive: false });
   bd.addEventListener('click', function (e) {
     var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold],button[data-refold]'); if (!bt) return;
     if (bt.dataset.fold) { d._unfold[bt.dataset.fold] = 1; fillBlock(d, true); }
@@ -475,7 +520,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     if (a === 'open') { var c0 = cur; if (c0.dataset.open === '1') c0.keepTop(function () { c0.setOpen(false); }); else c0.setOpen(true); }
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
-    else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); }
+    else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); sxFit(cur); }
     else if (a === 'fsv') setFs(CODEFS);
     else if (a === 'fs-' || a === 'fs+') setFs(Math.min(24, Math.max(10, fsOf(cur) + (a === 'fs+' ? 1 : -1))));
     else if (a === 'u20' || a === 'uall') return expand(-1, a === 'uall');
