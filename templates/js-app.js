@@ -142,20 +142,29 @@ function stationCard(u, nums, sc) {
   if (s.intuition) t += '<div class="intuition"><div class="ct">直覺</div>' + md(s.intuition) + '</div>';
   if (u.mech) { if (s.problem) t += '<div class="three"><div><b>問題</b> <span class="v">' + inl(s.problem) + '</span></div></div>'; if (s.text) t += md(s.text); }
   else t += '<div class="three">' + (s.situation ? '<div><b>情境</b> <span class="v">' + inl(s.situation) + '</span></div>' : '') + (s.purpose ? '<div><b>為了完成</b> <span class="v">' + inl(s.purpose) + '</span></div>' : '') + (s.did ? '<div><b>我做了</b> <span class="v">' + inl(s.did) + '</span></div>' : '') + '</div>';
+  if (s.chain) t += '<div class="chain"><div class="ct">呼叫鏈</div><pre>' + h(String(s.chain).replace(/\s+$/, '')) + '</pre></div>';
   (s.callouts || []).forEach(function (c) { var k = CK[c.kind] ? c.kind : 'why'; t += '<div class="callout ' + k + '"><div class="ct">' + h(CK[k]) + (c.title ? '・' + h(c.title) : '') + '</div>' + md(c.text) + '</div>'; });
   t += '</div>'; d.innerHTML = t;
   if (u.mech && s.svg) { var fg = document.createElement('div'); fg.className = 'er'; fg.innerHTML = s.svg; d.appendChild(fg); }
-  var cnt = {};
-  (s.hunks || []).forEach(function (ref) { var b = mkBlock(ref, s.notes || []); if (b) d.appendChild(b); cnt[ref] = 1; });
+  // in a layer view a station only shows that layer's code; mechanisms always show all of theirs
+  var notes = visibleNotes(s.notes);
+  (s.hunks || []).forEach(function (ref) {
+    if (!u.mech && !refInLayer(ref)) return;
+    var b = mkBlock(ref, notes); if (b) d.appendChild(b);
+  });
   return d;
 }
+// does a station have any code in the current layer?
+function stationInLayer(s) { return LAYER === '整體' || (s.hunks || []).some(refInLayer); }
 function viewScenario() {
   var c = document.createDocumentFragment(), toc = '';
+  var hint = layerHint(); if (hint) c.appendChild(hint);
   (G.scenarios || []).forEach(function (sc) {
-    var nums = numbering(sc);
+    var nums = numbering(sc), shown = (sc.stations || []).filter(stationInLayer);
+    if (!shown.length) return;
     var t = document.createElement('h2'); t.className = 'sc-title'; t.id = 'sc-' + sc.id; t.textContent = (sc.title || sc.id) + (sc.actor ? '（' + sc.actor + '）' : ''); c.appendChild(t);
     toc += '<div class="grp">' + h(sc.title || sc.id) + '</div>';
-    (sc.stations || []).forEach(function (s) {
+    shown.forEach(function (s) {
       c.appendChild(stationCard({ s: s }, nums, sc));
       toc += '<a class="' + (s.parent ? 'sub' : '') + '" href="#s-' + h(s.id) + '" data-jump="s-' + h(s.id) + '">' + h(nums[s.id]) + '. ' + h(s.title || s.id) + '</a>';
     });
@@ -247,31 +256,109 @@ function viewLogic() {
   return { node: c, toc: toc };
 }
 var FSORT = lsGet('dg.fsort', 'kind');
-var KINDS = ['前端', '後端', '資料庫', '其他'];
+var KINDS = ['前端', '後端', '資料模型', '其他'];
+// '資料庫' is the pre-0.1.116 name of '資料模型'
+function normKind(k) { return k === '資料庫' ? '資料模型' : k; }
 function globRe(g) { return new RegExp('^' + g.toLowerCase().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\u0001/g, '.*') + '$'); }
 var KIND_RULES = [];
-Object.keys(G.kinds || {}).forEach(function (k) { if (KINDS.indexOf(k) >= 0) (G.kinds[k] || []).forEach(function (g) { KIND_RULES.push([globRe(g), k]); }); });
+Object.keys(G.kinds || {}).forEach(function (k) { var nk = normKind(k); if (KINDS.indexOf(nk) >= 0) (G.kinds[k] || []).forEach(function (g) { KIND_RULES.push([globRe(g), nk]); }); });
 var KCACHE = {};
 function kindOf(p) { return KCACHE[p] || (KCACHE[p] = kindOf0(p)); }
 // order: files[path].kind > guide.kinds globs > built-in path/extension guess
 function kindOf0(p) {
-  var fk = ((G.files || {})[p] || {}).kind; if (KINDS.indexOf(fk) >= 0) return fk;
+  var fk = normKind(((G.files || {})[p] || {}).kind); if (KINDS.indexOf(fk) >= 0) return fk;
   var lp = p.toLowerCase(), ext = lp.slice(lp.lastIndexOf('.') + 1);
   for (var i = 0; i < KIND_RULES.length; i++) if (KIND_RULES[i][0].test(lp)) return KIND_RULES[i][1];
-  if (/(^|\/)migrations?\//.test(lp) || /modelsnapshot|dbcontext/.test(lp) || /^(sql|edmx|dbml|prisma)$/.test(ext) || /(^|\/)prisma\//.test(lp)) return '資料庫';
+  // data model: only explicit names, no loose "model"/"configuration" substrings (useModelForm.ts, ServiceConfiguration.cs)
+  if (/\.(models?|schema|types)\.(ts|tsx|js|mjs|cjs)$/.test(lp) || /(^|\/)(models|dtos|entities)\//.test(lp) || /(dto|views|entity)\.cs$/.test(lp)
+    || /(^|\/)configurations\/[^/]*configuration\.cs$/.test(lp)) return '資料模型';
+  if (/(^|\/)migrations?\//.test(lp) || /modelsnapshot|dbcontext/.test(lp) || /^(sql|edmx|dbml|prisma)$/.test(ext) || /(^|\/)prisma\//.test(lp)) return '資料模型';
   if (/^(js|mjs|cjs|ts)$/.test(ext) && /(^|\/)(server|backend|api|routes|controllers|middlewares?|functions)\//.test(lp)) return '後端';
   if (/^(js|jsx|mjs|cjs|ts|tsx|vue|svelte|css|scss|sass|less|html|htm|cshtml|razor|svg|png|jpe?g|gif|ico|woff2?)$/.test(ext)) return '前端';
   if (/^(cs|vb|fs|csproj|sln|java|kt|scala|go|py|php|rb|rs|c|cpp|h)$/.test(ext)) return '後端';
   return '其他';
 }
 function dirOf(p) { return p.indexOf('/') >= 0 ? p.slice(0, p.lastIndexOf('/')) : '(root)'; }
+
+// ---- layer views: 整體／前端／後端／資料模型 ----
+// a data-model file also belongs to the side its extension says (front-end model files show under 前端)
+function sideOf(p) { return /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte)$/i.test(p) ? '前端' : '後端'; }
+function inLayer(p, layer) {
+  var k = kindOf(p);
+  if (layer === '整體') return true;
+  if (layer === '資料模型') return k === '資料模型';
+  return k === layer || (k === '資料模型' && sideOf(p) === layer);
+}
+function refInLayer(ref) { var f = refFile(ref); return !!f && inLayer(f.path, LAYER); }
+var LAYER_N = {};
+['前端', '後端', '資料模型'].forEach(function (l) { LAYER_N[l] = files.filter(function (f) { return inLayer(f.path, l); }).length; });
+var HAS_DETAIL = units.some(function (u) { return (u.s.notes || []).some(function (n) { return n.tier === 'detail'; }); });
+var LAYERS = ['整體'].concat(G.depth === '概覽' ? [] : ['前端', '後端', '資料模型'].filter(function (l) { return LAYER_N[l]; }));
+var LAYER = lsGet('dg.layer', '整體');
+if (LAYERS.indexOf(LAYER) < 0) LAYER = '整體'; // a value saved by another report that this one does not have
+// 整體 shows core notes only; a layer view adds the detail notes
+function visibleNotes(list) { return (list || []).filter(function (n) { return LAYER !== '整體' || (n.tier || 'core') === 'core'; }); }
+function layerSelect() {
+  if (LAYERS.length < 2) return '';
+  return '<label class="layer" title="整體：全部檔案、核心說明。前端／後端／資料模型：只看那一部分，加上細部說明"><select id="layer">'
+    + LAYERS.map(function (l) { return '<option value="' + l + '"' + (l === LAYER ? ' selected' : '') + '>' + l + (l === '整體' ? '' : '（' + LAYER_N[l] + ' 檔）') + '</option>'; }).join('') + '</select></label>';
+}
+function layerHint() {
+  if (LAYER === '整體' || HAS_DETAIL) return null;
+  var p = document.createElement('p'); p.className = 'layer-hint';
+  p.textContent = '這份報告沒有細部說明，重新產生後才有。目前只顯示「' + LAYER + '」的檔案與核心說明。';
+  return p;
+}
+function setLayer(l) {
+  LAYER = LAYERS.indexOf(l) >= 0 ? l : '整體'; lsSet('dg.layer', LAYER === '整體' ? '' : LAYER);
+  var s = document.getElementById('layer'); if (s) s.value = LAYER;
+  cur = null; render();
+}
+document.addEventListener('change', function (e) { if (e.target.id === 'layer') { setLayer(e.target.value); window.scrollTo(0, 0); } });
+// a link to something the current layer hides: go back to 整體 first
+function showAll() { if (LAYER === '整體') return false; setLayer('整體'); return true; }
+
+// ---- 看不懂: copy a pointer to the note so the reader can paste it back into the chat ----
+function noteRef(btn) {
+  var card = btn.closest('.card'), blk = btn.closest('.blk'), nb = btn.closest('.nb');
+  var where = '', f = blk && byId[blk.dataset.file];
+  if (card && /^s-/.test(card.id)) {
+    var sid = card.id.slice(2), st = null, sc0 = null;
+    (G.scenarios || []).forEach(function (sc) { (sc.stations || []).forEach(function (s) { if (s.id === sid) { st = s; sc0 = sc; } }); });
+    if (st) where = '第 ' + numbering(sc0)[sid] + ' 站「' + (st.title || sid) + '」';
+  } else if (card && /^m-/.test(card.id)) where = '機制「' + ((G.mechanisms || []).filter(function (m) { return 'm-' + m.id === card.id; })[0] || {}).title + '」';
+  else if (card && /^l-/.test(card.id)) where = '邏輯導讀「' + ((G.logic || []).filter(function (l) { return 'l-' + l.id === card.id; })[0] || {}).question + '」';
+  else where = '依檔案';
+  var txt = nb ? nb.cloneNode(true) : null; if (txt) { Array.prototype.forEach.call(txt.querySelectorAll('.nk,.xref'), function (x) { x.remove(); }); }
+  var gist = txt ? txt.textContent.replace(/\s+/g, ' ').trim() : '';
+  if (gist.length > 28) gist = gist.slice(0, 28) + '…';
+  return '看不懂：' + where + ' ' + (f ? f.path.slice(f.path.lastIndexOf('/') + 1) : '') + ' ' + btn.dataset.q + (gist ? '（' + gist + '）' : '');
+}
+function copyText(s, done) {
+  function legacy() {
+    var ta = document.createElement('textarea'); ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); done(ok);
+  }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(s).then(function () { done(true); }, legacy); else legacy();
+}
+document.addEventListener('click', function (e) {
+  var b = e.target.closest && e.target.closest('.nq'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  var s = noteRef(b);
+  copyText(s, function (ok) {
+    var old = b.textContent; b.textContent = ok ? '已複製，貼回對話即可' : '複製失敗'; b.classList.add('ok');
+    if (!ok) window.prompt('複製這段文字，貼回對話：', s);
+    setTimeout(function () { b.textContent = old; b.classList.remove('ok'); }, 2200);
+  });
+});
 function viewFiles() {
   var c = document.createDocumentFragment(), toc = '';
   FWRAPS.length = 0;
   var tools = document.createElement('div'); tools.className = 'tools';
   tools.innerHTML = '排序：<select id="fsort"><option value="kind">依類別</option><option value="path">依路徑</option><option value="size">依大小</option></select>';
   c.appendChild(tools);
-  var list = files.slice();
+  var hint = layerHint(); if (hint) c.appendChild(hint);
+  var list = files.filter(function (f) { return inLayer(f.path, LAYER); });
   var key = function (f) { return (FSORT === 'kind' ? KINDS.indexOf(kindOf(f.path)) + '\u0000' : '') + dirOf(f.path) + '\u0000' + f.path; };
   if (FSORT === 'size') list.sort(function (a, b) { return (b.additions + b.deletions) - (a.additions + a.deletions); });
   else list.sort(function (a, b) { return key(a) < key(b) ? -1 : 1; }); // sort by dir first so each group stays contiguous
@@ -310,7 +397,7 @@ function openFile(wrap, f, keepOpen, lazy) {
   var holder = wrap.lastChild;
   if (holder.firstChild) { if (keepOpen) return holder.firstChild; holder.innerHTML = ''; return null; }
   var g = (G.files || {})[f.path] || {};
-  var b = mkBlock(f.id, allNotesOf(f), { forceOpen: true });
+  var b = mkBlock(f.id, visibleNotes(allNotesOf(f)), { forceOpen: true });
   b.dataset.open = '1';
   var pre = document.createElement('div');
   pre.innerHTML = schemaHtml(f) + mappingHtml(f);
@@ -327,7 +414,8 @@ function jumpTo(see) {
   location.hash = '#files/' + r.file.id + '/' + m[2] + (r.hunk ? '/' + r.hunk.id : '');
 }
 function doJump(fid, line, hid) {
-  var wrap = document.getElementById('file-' + fid); if (!wrap) return;
+  var wrap = document.getElementById('file-' + fid);
+  if (!wrap) { if (showAll()) wrap = document.getElementById('file-' + fid); if (!wrap) return; }
   var b = wrap._open(); if (!b) return;
   fillBlock(b, false);
   if (!line) { wrap.scrollIntoView({ block: 'start' }); return; }
@@ -350,12 +438,19 @@ function render() {
     BLOCKS.length = 0; if (lgOff) lgOff();
     var v = tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
-    $toc.innerHTML = v.toc; cur = tab;
+    $toc.innerHTML = v.toc; cur = tab; spyOn = null;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs a'), function (a) { a.classList.toggle('on', a.dataset.t === tab); });
     var fs = document.getElementById('fsort'); if (fs) { fs.value = FSORT; fs.onchange = function () { FSORT = fs.value; lsSet('dg.fsort', FSORT); cur = null; render(); }; }
   }
   if (tab === 'files' && hs[1]) doJump(hs[1], hs[2], hs[3]);
   else if (!hs[1] && hs[0] && !/^(scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
+  spySoon();
+}
+// a station hidden by the current layer: switch to 整體, then scroll
+function scrollToId(id) {
+  var el = document.getElementById(id);
+  if (!el && showAll()) el = document.getElementById(id);
+  if (el) el.scrollIntoView();
 }
 // Global collapse / expand. Expand confirms first and renders lazily (viewport observer).
 function toggleAll(open) {
@@ -380,18 +475,44 @@ document.addEventListener('click', function (e) {
   var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all]') : null; if (!t) return;
   if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
-  else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { var el = document.getElementById(gid); if (el) el.scrollIntoView(); }, 0); }
+  else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { scrollToId(gid); }, 0); }
   else if (t.dataset.jump) {
     var id = t.dataset.jump, want = /^l-/.test(id) ? 'logic' : /^m-/.test(id) ? 'mech' : 'scenario';
     if (t.closest('.dg-toc') || t.closest('.refs')) {
       e.preventDefault();
       var tab = cur === 'files' && t.closest('.refs') ? want : cur;
-      if (tab !== cur) { location.hash = '#' + tab; setTimeout(function () { var el = document.getElementById(id); if (el) el.scrollIntoView(); }, 0); }
-      else { var el = document.getElementById(id); if (el) el.scrollIntoView(); }
+      if (tab !== cur) { location.hash = '#' + tab; setTimeout(function () { scrollToId(id); }, 0); }
+      else scrollToId(id);
     }
   }
 });
+// ---- sidebar follows the reading position: the link of the section at the top of the screen lights up ----
+function tocTarget(a) { return document.getElementById(a.dataset.jump || (a.dataset.file ? 'file-' + a.dataset.file : '')); }
+var spyRaf = 0, spyOn = null;
+function spy() {
+  spyRaf = 0;
+  var tb = document.querySelector('.tabbar'), y = (tb ? tb.offsetHeight : 0) + 24, on = null, best = -Infinity, last = null;
+  var atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+  Array.prototype.forEach.call($toc.querySelectorAll('a'), function (a) {
+    var el = tocTarget(a); if (!el) return;
+    var top = el.getBoundingClientRect().top; last = a;
+    if (top <= y && top > best) { best = top; on = a; }
+  });
+  if (atEnd && last) on = last; // the last section may be too short to reach the top
+  if (on === spyOn) return;
+  if (spyOn) spyOn.classList.remove('on');
+  spyOn = on; if (!on) return;
+  on.classList.add('on');
+  // keep the lit link inside the sidebar's own scroll area, clear of the bottom-left controls
+  var r = on.getBoundingClientRect(), t = $toc.getBoundingClientRect();
+  if (r.top < t.top + 40 || r.bottom > t.bottom - 140) $toc.scrollTop += r.top - t.top - t.height / 3;
+}
+function spySoon() { if (!spyRaf) spyRaf = requestAnimationFrame(spy); }
+window.addEventListener('scroll', spySoon, { passive: true });
+window.addEventListener('resize', spySoon);
 $main.innerHTML = head(); syncSeg();
+// the layer selector sits bottom-left with the settings button, so it is reachable without scrolling up
+document.getElementById('dset').insertAdjacentHTML('afterbegin', layerSelect());
 window.addEventListener('hashchange', render);
 render();
 if (io === null) BLOCKS.forEach(function (b) { fillBlock(b); });

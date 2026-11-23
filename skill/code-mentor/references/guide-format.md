@@ -18,10 +18,11 @@
       "did": "我做了：改了哪裡",
       "change": "ADDED|MODIFIED|REMOVED", "status": "done|unverified|gap",
       "hunks": ["f12", "f13#2", "src/x.ts"],
+      "chain": "（選填）呼叫鏈，多行文字，照原樣顯示",
       "notes": [{
         "hunk": "f13#2", "line": 47, "side": "new|old",
         "to": 62, "step": 1, "see": "f14#1:30",
-        "kind": "what|how|why|syntax|good|risk|bug|info", "text": "..."
+        "kind": "what|how|why|syntax|good|risk|bug|info", "tier": "core|detail", "text": "..."
       }],
       "callouts": [{ "kind": "what|how|why|syntax|good|risk|bug", "title": "...", "text": "markdown-lite" }]
     }]
@@ -34,10 +35,10 @@
       "edges": [{ "from": "a", "to": "b", "label": "上傳", "dashed": false }]
     }
   }],
-  "kinds": { "後端": ["src/server/**", "apps/api/**"], "前端": ["ClientApp/**"] },
+  "kinds": { "後端": ["src/server/**", "apps/api/**"], "前端": ["ClientApp/**"], "資料模型": ["src/**/Migrations/**"] },
   "files": {
     "path/to/file": {
-      "kind": "前端|後端|資料庫|其他",
+      "kind": "前端|後端|資料模型|其他",
       "summary": "", "explain": "", "skip": "略過原因", "skipHunks": ["f3#4"],
       "mapping": [{ "from": "f5#1:20", "to": "f9#1:14", "text": "Entity 這行產生 migration 那行" }]
     }
@@ -56,9 +57,22 @@
   - `to`（選填）：結束行（同一側）。形成**範圍註解**：範圍左側有色條，說明框放在範圍第一行上方，標題 `L47–L62`。
   - `step`（選填）：數字，顯示成編號圓章。用來把一個方法依序一段一段講。
   - `see`（選填）：`"<hunkId|fileId>:<行號>"`，產生可點的交叉參照，跳到「依檔案」分頁該行。
-- 「依檔案」分頁把檔案分成 前端／後端／資料庫／其他。優先順序：`files[path].kind` > `kinds`（glob，`**` 跨目錄、`*` 單層）> 工具依副檔名與路徑猜。工具只看副檔名，分不出 Node／monorepo 的 `.js`／`.ts`。專案的 `.js`／`.ts` 同時有前後端時（看 `package.json` 依賴：`express`、`@nestjs/*`、`fastify` 是後端，`react`、`vue`、`@angular/*` 是前端；也看目錄結構），**必須**填 `kinds`。少數例外檔再用 `files[path].kind`。
+  - `tier`（選填，預設 `core`）：`core` 在四種檢視都顯示；`detail` 只在「前端」「後端」「資料模型」檢視顯示（第 5 節「core 與 detail」）。
+- `chain`（站，選填）：這站的呼叫鏈，顯示在「我做了」下方。用 `→` 表示呼叫、`├`／`└` 表示分支，右邊對齊寫在哪一層、哪個檔或 API。例：
+
+  ```
+  清單頁 useEffect
+    → load()                    前端：AuthorizedNaturalPersons.tsx
+    → service.getList()         GET /api/AuthorizedNaturalPerson
+    → Controller.GetList        後端
+    → Query.GetListAsync
+         ├ ResolveAccessAsync   目前事業與 canManage（2-e）
+         └ 組回應：quota/used/items
+  ```
+- 報告上方的下拉選單有四種檢視：整體（全部檔案、只顯示 core）、前端、後端、資料模型（只顯示那一類檔案，core 加 detail）。資料模型檔另依副檔名歸邊：`ts`／`tsx`／`js`／`vue` 也出現在「前端」，其他也出現在「後端」。
+- 「依檔案」分頁把檔案分成 前端／後端／資料模型／其他（舊名 `資料庫` 仍可用，等於 `資料模型`）。工具認得的資料模型：`*.model.ts`／`*.schema.ts`／`*.types.ts`、`models/`／`dtos/`／`entities/` 目錄、`*Dto.cs`／`*Views.cs`／`*Entity.cs`、`Configurations/*Configuration.cs`、migration／ModelSnapshot／DbContext／SQL。其他命名的 Entity、enum、interface 要用 `kinds` 或 `files[path].kind` 指定。優先順序：`files[path].kind` > `kinds`（glob，`**` 跨目錄、`*` 單層）> 工具依副檔名與路徑猜。工具只看副檔名，分不出 Node／monorepo 的 `.js`／`.ts`。專案的 `.js`／`.ts` 同時有前後端時（看 `package.json` 依賴：`express`、`@nestjs/*`、`fastify` 是後端，`react`、`vue`、`@angular/*` 是前端；也看目錄結構），**必須**填 `kinds`。少數例外檔再用 `files[path].kind`。
 - `files[path].mapping`：Entity 設定行 ↔ Migration 語法行的對照，`from`／`to` 格式同 `see`。
-- `check` 會驗證：`to` ≥ `line` 且兩端在 hunk 內；`see`／`mapping` 的目標存在。
+- `check` 會驗證：`to` ≥ `line` 且兩端在 hunk 內；`see`／`mapping` 的目標存在；`tier` 只能是 `core`／`detail`；`chain` 是字串。`導讀`／`教學` 的站跨兩個以上檔案沒有 `chain`、或只有 detail 沒有 core 時會警告。
 - `logic`（選填）：「邏輯導讀」分頁，一個 section 講一個核心方法群。不參與覆蓋檢查（覆蓋仍由 stations 負責）。
   - 必填：`id`（不可重複）、`station`（某個情境裡存在的站 id）、`question`、`steps`（至少 1 步）。其他選填：`situation`、`input`、`result`、`handoff`、`failure`。
   - `steps[]`：`title`、`text`，加上與註解相同的 `hunk`／`line`／`to`／`side`／`kind`／`see`。每步必須指到程式；報告右側面板只顯示該步 `line`～`to` 前後 3 行。

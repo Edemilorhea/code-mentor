@@ -42,8 +42,10 @@ b,strong{font-weight:600;color:var(--fg)}
 .dg-main{min-width:0}
 /* keep content off the screen edges: text running edge to edge is tiring to read */
 @media(min-width:1160px){.dg-main{padding-inline:48px}}
-@media(min-width:1160px){.dg-doc{display:grid;grid-template-columns:210px minmax(0,1fr);gap:48px}
-.dg-toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;padding-block:56px 72px;scrollbar-width:thin}}
+/* sidebar width follows the window: 18% of it, at least 230px, at most 360px */
+:root{--toc-w:clamp(230px,18vw,360px)}
+@media(min-width:1160px){.dg-doc{display:grid;grid-template-columns:var(--toc-w) minmax(0,1fr);gap:32px}
+.dg-toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;padding-block:56px 120px;scrollbar-width:thin}}
 @media(max-width:1159.98px){.dg-toc{display:none}}
 .toc-off .dg-doc{display:block}.toc-off .dg-toc{display:none}
 /* top-left: sidebar toggle + theme, icon buttons (the sidebar toggle shows "close" while open, "open" while closed) */
@@ -57,8 +59,9 @@ b,strong{font-weight:600;color:var(--fg)}
 /* only a full-width column reaches the top-left buttons; a centred one starts clear of them */
 .toc-off.text-fill .tabbar{padding-left:calc(var(--gutter) + 86px)}
 /* bottom-left: display settings; sits at the foot of the sidebar, or as an icon when the sidebar is hidden */
-.dg-set{position:fixed;left:var(--gutter);bottom:16px;z-index:35}
-@media(min-width:1160px){:root:not(.toc-off) .dg-set>button{width:210px;justify-content:flex-start;padding:0 12px}}
+.dg-set{position:fixed;left:var(--gutter);bottom:16px;z-index:35;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+@media(min-width:1160px){:root:not(.toc-off) .dg-set .layer select{width:var(--toc-w)}}
+@media(min-width:1160px){:root:not(.toc-off) .dg-set>button{width:var(--toc-w);justify-content:flex-start;padding:0 12px}}
 @media(max-width:1159.98px){.dg-set .lbl{display:none}}
 .toc-off .dg-set .lbl{display:none}
 .dg-set .pnl{position:absolute;left:0;bottom:44px;width:300px;max-height:calc(100vh - 80px);overflow:auto;padding:8px 14px 12px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);box-shadow:0 12px 36px rgba(0,0,0,.4)}
@@ -110,7 +113,24 @@ b,strong{font-weight:600;color:var(--fg)}
 .keyline .add{color:var(--new)}.keyline .del{color:var(--risk)}
 details.commits{font-size:var(--fs-sm);margin:8px 0;color:var(--muted)}
 .tabbar{position:sticky;top:0;z-index:20;margin-inline:calc(-1*var(--gutter));padding-inline:var(--gutter);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);margin-top:16px}
+.tabbar{display:flex;align-items:center;gap:12px}
 .tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+/* layer view selector: fixed bottom-left above the settings button (see .dg-set) */
+.layer select{appearance:none;font:600 calc(14px*var(--ui))/1 var(--font-sans);color:var(--fg);background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E") no-repeat right 10px center;border:1px solid var(--line-strong);border-radius:8px;padding:7px 28px 7px 11px;cursor:pointer}
+.layer select:hover{border-color:var(--accent-fill)}
+.layer-hint{margin:16px 0 0;padding:10px 14px;border:1px dashed var(--line-strong);border-radius:8px;color:var(--muted);font-size:var(--fs-sm)}
+/* call chain of a station */
+.chain{margin:12px 0 4px;border:1px solid var(--line);border-radius:8px;background:var(--sunken);padding:10px 14px}
+.chain .ct{font:600 var(--fs-xs)/1.3 var(--font-sans);color:var(--muted);margin-bottom:6px}
+.chain pre{margin:0;font:400 var(--fs-code,14px)/1.6 var(--font-mono);white-space:pre;overflow-x:auto;color:var(--fg)}
+/* a detail note, and the 看不懂 button on every note */
+.nb .td{margin-left:6px;font:600 calc(11px*var(--ui))/1 var(--font-sans);padding:2px 6px;border-radius:99px;background:var(--sunken);color:var(--muted)}
+.nb .nk{display:flex;align-items:center;gap:2px}
+.nb .nq{appearance:none;margin-left:auto;border:1px solid transparent;background:none;color:var(--faint);font:500 calc(11.5px*var(--ui))/1 var(--font-sans);padding:3px 7px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .12s}
+.nb:hover .nq,.nb .nq:focus-visible,.nb .nq.ok{opacity:1}
+.nb .nq:hover{border-color:var(--line-strong);color:var(--fg)}
+.nb .nq.ok{color:var(--accent);opacity:1}
+@media(hover:none){.nb .nq{opacity:1}}
 .tabs a{padding:14px 14px 12px;margin-bottom:-1px;color:var(--muted);text-decoration:none;font:500 calc(15px*var(--ui))/1.2 var(--font-sans);border-bottom:2px solid transparent;white-space:nowrap}
 .tabs a:hover{color:var(--fg)}.tabs a.on{color:var(--fg);border-bottom-color:var(--accent-fill)}
 .content{padding-top:48px}

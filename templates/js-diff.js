@@ -69,7 +69,9 @@ function seeLabel(see) {
 function noteBlock(n) {
   var range = typeof n.to === 'number' && n.to > n.line ? '<b>' + (n.side === 'old' ? '舊 ' : '') + 'L' + n.line + '–L' + n.to + '</b> ' : '';
   var k = KL[n.kind] ? n.kind : 'info';
-  return '<div class="nb nk-' + k + '"><div class="nk">' + (n.step ? '<span class="badge">' + h(n.step) + '</span>' : '') + range + h(KL[k]) + '</div>' + md(n.text)
+  var rl = 'L' + n.line + (typeof n.to === 'number' && n.to > n.line ? '–' + n.to : '') + (n.side === 'old' ? '（舊）' : '');
+  return '<div class="nb nk-' + k + (n.tier === 'detail' ? ' tier-d' : '') + '"><div class="nk">' + (n.step ? '<span class="badge">' + h(n.step) + '</span>' : '') + range + h(KL[k]) + (n.tier === 'detail' ? '<span class="td">細部</span>' : '')
+    + '<button type="button" class="nq" data-q="' + h(rl) + '" title="複製一段文字，貼回對話，請 AI 重寫這則說明">看不懂</button></div>' + md(n.text)
     + (n.see ? '<a class="xref" href="javascript:void 0" data-see="' + h(n.see) + '">→ ' + h(seeLabel(n.see)) + '</a>' : '') + '</div>';
 }
 function noteRowInline(list) {
@@ -217,7 +219,7 @@ function fvLabel(b) {
   return fullOf(b) ? '只看重點' : '看完整檔案' + (f.content || f.status === 'added' ? '' : '（僅 diff）');
 }
 function fillBlock(b, force) {
-  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '') + (VIEW.hideFmt ? ':nofmt' : '');
+  var mode = modeOf(b), full = fullOf(b), key = mode + (full ? ':full' : '') + (VIEW.hideFmt ? ':nofmt' : '') + ':' + (typeof LAYER === 'string' ? LAYER : '');
   if (!force && b.dataset.done === '1' && b.dataset.rmode === key) return;
   var f = byId[b.dataset.file], hk = b.dataset.hunk && !full ? hunkById[b.dataset.hunk][1] : null, hs = hk ? [hk] : f.hunks, lang = langOf(f.path), ns = b._notes || [], body = '';
   // a station's notes may target other files: only this file's own line notes switch on focus mode
@@ -281,11 +283,26 @@ function mkBlock(ref, notes, opts) {
   bd.style.display = open ? '' : 'none';
   tg.textContent = '顯示：' + (modeOf(d) === 'sbs' ? '並排' : '單欄');
   var fv = d.querySelector('.fv'); fv.textContent = fvLabel(d);
-  fv.addEventListener('click', function () { d._fv = !fullOf(d); d._unfold = {}; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
+  // a block that gets shorter while its top is above the screen would leave the reader far below it:
+  // bring its header back to the top of the screen
+  function keepTop(fn) {
+    fn();
+    var r = d.getBoundingClientRect(), tabs = document.querySelector('.tabbar'), off = (tabs ? tabs.offsetHeight : 0) + 8;
+    if (r.top < off) window.scrollBy(0, r.top - off);
+  }
+  d.keepTop = keepTop;
+  fv.addEventListener('click', function () {
+    var shrink = fullOf(d) && d.dataset.open === '1';
+    d._fv = !fullOf(d); d._unfold = {};
+    if (d.dataset.open !== '1') setOpen(true); else if (shrink) keepTop(function () { fillBlock(d); }); else fillBlock(d);
+  });
   // lazy: hand rendering to the viewport observer (expand-all), instead of rendering now
   function setOpen(v, lazy) { d.dataset.open = v ? '1' : '0'; bd.style.display = v ? '' : 'none'; fd.textContent = v ? '收合' : '展開'; if (v) { if (lazy && io) io.observe(d); else fillBlock(d); } }
   d.setOpen = setOpen;
-  fh.addEventListener('click', function (e) { var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return; setOpen(d.dataset.open !== '1'); });
+  fh.addEventListener('click', function (e) {
+    var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return;
+    if (d.dataset.open === '1') keepTop(function () { setOpen(false); }); else setOpen(true);
+  });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
   bd.addEventListener('click', function (e) {
     var bt = e.target.closest && e.target.closest('button[data-gap],button[data-fold],button[data-refold]'); if (!bt) return;
@@ -404,7 +421,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     return best;
   }
   function collapse(all) {
-    if (all) { cur._gaps = {}; cur._unfold = {}; fillBlock(cur, true); return update(); }
+    if (all) { var c0 = cur; c0.keepTop(function () { c0._gaps = {}; c0._unfold = {}; fillBlock(c0, true); }); return update(); }
     var row = unRow(cur); if (!row) return;
     row.querySelector(UN).click(); update();
   }
@@ -455,7 +472,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
   tb.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tb]'); if (!t || !cur) return;
     var a = t.dataset.tb;
-    if (a === 'open') cur.setOpen(cur.dataset.open !== '1');
+    if (a === 'open') { var c0 = cur; if (c0.dataset.open === '1') c0.keepTop(function () { c0.setOpen(false); }); else c0.setOpen(true); }
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
     else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); }
