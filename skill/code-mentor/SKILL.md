@@ -145,6 +145,8 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
 1. `code-mentor collect [選項]`：讀印出的表格（id、狀態、+/−、旗標 gen／large、路徑、hunk 數）。`collect` 已停用 Git 的外部 textconv；二進位檔仍列在清單，不會冒充文字 diff。
 2. 讀本 skill 資料夾的 `references/guide-format.md`（`guide.json` 的欄位）。只讀一次。
 3. **先寫規劃。** 只看 `collect` 的表格，把**所有檔案**按情境歸類：核心程式、接線、產生檔、其他變更。馬上把規劃寫進 `guide.json`：`title`、`need`、`depth`、每一站的 `id`／`title`／`hunks`（先填整檔 id，例如 `f13`；順序照第 5 節「站內順序」），`kinds`（前端／後端／資料模型），以及產生檔與雜訊的 `files[path].summary`／`skip`。每站先只留這三個欄位當骨架。這一步只對「從路徑看不出去向」的檔案用 `show`。
+   同時寫**功能總覽**：`summary`、`features`（每個功能的 `title`／`what`／`why`／`status`／`stations`）、`outOfScope`、`unknowns`。依據是 commit 訊息、MR 說明、`collect` 的表格；入口檔（畫面、Controller、API）看不出功能時才 `show` 它。不要為了這一步讀完整份 diff。功能用使用者看得見的行為描述，不寫類別或方法名。
+3.5. **先給使用者確認功能總覽**（`概覽` 等級跳過）：跑 `code-mentor build`，打開 HTML（只有「功能總覽」有內容），在回覆列出功能清單，問「功能有沒有缺或理解錯？確認後我再寫各站的 code 講解」。**停下來等回答**；使用者指出缺漏就先改 `features` 與站的規劃。使用者一開始說「不用確認」「直接寫完」時不停。
 4. **一站一站寫，一次寫完。** 依站的順序，每一站做完下面三件事才換下一站：
    1. `code-mentor show <fileId|hunkId|path>`：只看這一站的檔案。行號是新檔行號；diff 看不懂時才讀相應原始碼。
    2. 依第 5 節規則把這一站**一次寫完**：`situation`／`purpose`／`did`／`change`、`chain`、callout、core 註解與 detail 註解（核心檔的 `hunks` 改成 hunk id）。寫哪些欄位照第 0.5 節的等級。篇幅按變更的影響分配，不按 hunk 數平均分配。不要先寫 core、之後再回頭補 detail：回頭補要重讀 diff 與 `guide.json`。

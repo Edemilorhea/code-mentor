@@ -61,7 +61,7 @@ function head() {
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
   s += '</header>';
-  s += '<div class="tabbar"><nav class="tabs"><a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
+  s += '<div class="tabbar"><nav class="tabs">' + (HAS_OV ? '<a href="#overview" data-t="overview">功能總覽</a>' : '') + '<a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
   return s;
 }
 // ---- display settings panel (button at the bottom of the sidebar) ----
@@ -181,6 +181,33 @@ function viewMech() {
   }
   (G.mechanisms || []).forEach(function (m) { c.appendChild(stationCard({ s: m, mech: true })); toc += '<a href="#m-' + h(m.id) + '" data-jump="m-' + h(m.id) + '">' + h(m.title || m.id) + '</a>'; });
   if (!c.childNodes.length) { var e = document.createElement('p'); e.className = 'empty'; e.textContent = '沒有機制／架構說明。'; c.appendChild(e); }
+  return { node: c, toc: toc };
+}
+// ---- 功能總覽: what the branch does and why, no code ----
+var HAS_OV = (G.features || []).length > 0;
+function stationRef(id) {
+  var out = null;
+  (G.scenarios || []).forEach(function (sc) { (sc.stations || []).forEach(function (s) { if (s.id === id) out = { s: s, num: numbering(sc)[id] }; }); });
+  return out;
+}
+function viewOverview() {
+  var c = document.createDocumentFragment(), toc = '<div class="grp">功能</div>';
+  var top = document.createElement('section'); top.className = 'card'; top.id = 'ov-top';
+  // summary already shows in the header above the tabs; only the need is added here
+  if (G.need) { top.innerHTML = '<div class="prose"><h3>需求</h3>' + md(G.need) + '</div>'; c.appendChild(top); }
+  (G.features || []).forEach(function (f, i) {
+    var d = document.createElement('section'); d.className = 'card feat'; d.id = 'ov-f' + (i + 1);
+    var st = ST[f.status];
+    var links = (f.stations || []).map(function (id) { var r = stationRef(id); return r ? '<a href="#scenario" data-goto="s-' + h(id) + '"><span class="num">' + h(r.num) + '</span>' + h(r.s.title || id) + '</a>' : ''; }).filter(Boolean).join('　');
+    d.innerHTML = '<div class="prose"><h3><span class="num">' + (i + 1) + '</span>' + h(f.title || '') + (st ? '<span class="chip ' + st[0] + '">' + st[1] + '</span>' : '') + '</h3><div class="three">'
+      + (f.what ? '<div><b>能做什麼</b> <span class="v">' + inl(f.what) + '</span></div>' : '')
+      + (f.why ? '<div><b>為什麼</b> <span class="v">' + inl(f.why) + '</span></div>' : '')
+      + (links ? '<div><b>看 code</b> <span class="v">' + links + '</span></div>' : '') + '</div></div>';
+    c.appendChild(d); toc += '<a href="#ov-f' + (i + 1) + '" data-jump="ov-f' + (i + 1) + '">' + (i + 1) + '. ' + h(f.title || '') + '</a>';
+  });
+  var list = function (title, xs) { return (xs || []).length ? '<div><b>' + title + '</b><ul>' + xs.map(function (x) { return '<li>' + inl(x) + '</li>'; }).join('') + '</ul></div>' : ''; };
+  var rest = list('這次不做', G.outOfScope) + list('還不確定', G.unknowns);
+  if (rest) { var e = document.createElement('section'); e.className = 'card'; e.id = 'ov-rest'; e.innerHTML = '<div class="prose"><h3>沒做的、不確定的</h3>' + rest + '</div>'; c.appendChild(e); toc += '<a href="#ov-rest" data-jump="ov-rest">沒做的、不確定的</a>'; }
   return { node: c, toc: toc };
 }
 var lgOff = null; // detaches the logic tab's scroll/resize listeners when the view is rebuilt
@@ -433,17 +460,17 @@ function doJump(fid, line, hid) {
 // ---- router ----
 var view = null, cur = null;
 function render() {
-  var hs = (location.hash || '#scenario').slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' ? hs[0] : 'scenario';
+  var hs = (location.hash || (HAS_OV ? '#overview' : '#scenario')).slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' || (hs[0] === 'overview' && HAS_OV) ? hs[0] : /^ov-/.test(hs[0]) && HAS_OV ? 'overview' : 'scenario';
   if (cur !== tab) {
     BLOCKS.length = 0; if (lgOff) lgOff();
-    var v = tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
+    var v = tab === 'overview' ? viewOverview() : tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
     $toc.innerHTML = v.toc; cur = tab; spyOn = null;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs a'), function (a) { a.classList.toggle('on', a.dataset.t === tab); });
     var fs = document.getElementById('fsort'); if (fs) { fs.value = FSORT; fs.onchange = function () { FSORT = fs.value; lsSet('dg.fsort', FSORT); cur = null; render(); }; }
   }
   if (tab === 'files' && hs[1]) doJump(hs[1], hs[2], hs[3]);
-  else if (!hs[1] && hs[0] && !/^(scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
+  else if (!hs[1] && hs[0] && !/^(overview|scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
   spySoon();
 }
 // a station hidden by the current layer: switch to 整體, then scroll

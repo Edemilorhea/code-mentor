@@ -8,6 +8,7 @@
   "intent": "Confirmed|Inferred|Unknown",
   "depth": "概覽|導讀|教學",
   "outOfScope": ["..."], "unknowns": ["..."], "evidence": "用了哪些證據、跑過什麼",
+  "features": [{ "title": "申請帳號", "what": "申請人填表送出，拿到臨時密碼", "why": "醫院不用再人工開帳號", "status": "done|unverified|gap", "stations": ["s3"] }],
   "scenarios": [{
     "id": "apply", "title": "大同醫院申請帳號", "actor": "申請人",
     "stations": [{
@@ -49,6 +50,7 @@
 欄位說明：
 
 - `depth`：這份導讀的深度等級（第 0.5 節）。只能是 `概覽`、`導讀`、`教學`；不填時 `check` 照 `導讀` 的規則檢查。
+- `features`：「功能總覽」分頁（報告第一個分頁，不放程式）。每個功能一項：`title` 功能名稱、`what` 使用者能做什麼、`why` 為什麼要做、`status` 同站的狀態、`stations` 講這個功能的站 id（指向子站也算涵蓋它的主站）。分頁也顯示 `summary`、`need`、`outOfScope`、`unknowns`。`導讀`／`教學` 沒有 `features` 時 `check` 警告；主站沒被任何功能引用時也警告。
 - `hunks`：可填檔案 id（整檔）、路徑，或 hunk id（`f13#2`）。
 - `parent`：設為某主站 id 時，這站是子站，顯示成 `3-a`、`3-b`。
 - 文字欄位支援 markdown-lite：`` `code` ``、`**粗體**`、空行分段、`- ` 清單。工具會跳脫 HTML。
