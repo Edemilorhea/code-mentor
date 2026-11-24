@@ -8,7 +8,18 @@
   "intent": "Confirmed|Inferred|Unknown",
   "depth": "概覽|導讀|教學",
   "outOfScope": ["..."], "unknowns": ["..."], "evidence": "用了哪些證據、跑過什麼",
-  "features": [{ "title": "申請帳號", "what": "申請人填表送出，拿到臨時密碼", "why": "醫院不用再人工開帳號", "status": "done|unverified|gap", "stations": ["s3"] }],
+  "features": [{ "title": "申請帳號", "what": "申請人填表送出，拿到臨時密碼", "why": "醫院不用再人工開帳號", "status": "done|unverified|gap", "spine": "p1", "stations": ["s3"] }],
+  "spines": [{
+    "id": "p1", "title": "送出申請：從按鈕到資料表", "text": "（選填）一兩句開場",
+    "diagram": { "type": "flow", "nodes": [{ "id": "a", "label": "前端 ApplyForm", "kind": "focal" }], "edges": [] },
+    "steps": [{ "file": "f12", "module": "前端", "does": "按送出，POST /api/apply", "writes": "", "station": "s3", "ref": "f12#2:40" },
+              { "file": "f20", "module": "Account", "does": "建帳號", "writes": "Account（新增一列）", "station": "s3", "ref": "f20#1:55" }],
+    "exampleCase": "以王小明（A123456789）申請為例",
+    "example": [{ "table": "Account", "op": "新增", "row": "Id=101, Name=王小明", "link": "Id → Apply.AccountId", "ref": "f20#1:55" }],
+    "failure": [{ "when": "第 2 步建帳號失敗", "leaves": "Apply 已寫入、Account 沒有", "fix": "重送會再建一次", "unverified": true }],
+    "recall": "不看資料，說出送出申請流過哪些檔案、寫了哪些表。", "recallAnswer": "（選填）答案"
+  }],
+  "noSpine": "（選填）教學等級有 SaveChanges 卻不需要主線的原因，例如只有 seed",
   "scenarios": [{
     "id": "apply", "title": "大同醫院申請帳號", "actor": "申請人",
     "stations": [{
@@ -52,6 +63,14 @@
 
 - `depth`：這份導讀的深度等級（第 0.5 節）。只能是 `概覽`、`導讀`、`教學`；不填時 `check` 照 `導讀` 的規則檢查。
 - `features`：「功能總覽」分頁（報告第一個分頁，不放程式）。每個功能一項：`title` 功能名稱、`what` 使用者能做什麼、`why` 為什麼要做、`status` 同站的狀態、`stations` 講這個功能的站 id（指向子站也算涵蓋它的主站）。分頁也顯示 `summary`、`need`、`outOfScope`、`unknowns`。`導讀`／`教學` 沒有 `features` 時 `check` 警告；主站沒被任何功能引用時也警告。
+- `spines`：「主線」分頁（緊接在功能總覽之後）。每個**會寫入資料**的使用者操作一條；只讀的操作不寫。
+  - `steps[]`：`file`（檔案或 hunk id）、`module`（所在模組）、`does`、`writes`（寫入哪張表，沒寫入留空）、`station`（對應的站 id，必填）。
+  - `example[]`：同一個具體例子，每張表最後新增或修改的那一列。`table`、`op`、`row`、`link`（靠哪個值串到別的表）。`導讀` 等級可省略。
+  - `failure[]`：`when`、`leaves`（會留下什麼）、`fix`（怎麼補救）。
+  - **出處**：`steps`、`example`、`failure` 的每一項都要有 `ref`（`hunkId:line`，同 `see`），指到證明這件事的程式行。diff 裡找不到證據（例如另一個模組有沒有一起回滾）時，不要猜，設 `unverified: true`，報告顯示「未驗證」。
+  - `recall`：一題重述題，讀者不看資料回答；`recallAnswer` 選填。
+  - `features[].spine`：功能總覽先連主線，再連站。
+- `noSpine`：`教學` 等級程式有 `SaveChanges` 卻沒有 `spines` 時 `check` 報**錯誤**；寫入不是使用者操作（seed、腳本）時，填這個欄位說明原因。
 - `hunks`：可填檔案 id（整檔）、路徑，或 hunk id（`f13#2`）。
 - `parent`：設為某主站 id 時，這站是子站，顯示成 `3-a`、`3-b`。
 - 文字欄位支援 markdown-lite：`` `code` ``、`**粗體**`、空行分段、`- ` 清單。工具會跳脫 HTML。
@@ -72,6 +91,8 @@
          ├ ResolveAccessAsync   目前事業與 canManage（2-e）
          └ 組回應：quota/used/items
   ```
+
+  有寫入資料庫的那一行，行尾加 `⇒ 寫入 <表名>`，例如 `→ Handler.Handle → SaveChanges   ⇒ 寫入 CompanySCUser`。站的程式有新增 `SaveChanges` 而 chain 沒有任何 `⇒` 時，`check` 警告。主線已經講完整條鏈的站，chain 可以縮成一行「本站是主線 p1 第 3 步」。
 - 報告上方的下拉選單有四種檢視：整體（全部檔案、只顯示 core）、前端、後端、資料模型（只顯示那一類檔案，core 加 detail）。資料模型檔另依副檔名歸邊：`ts`／`tsx`／`js`／`vue` 也出現在「前端」，其他也出現在「後端」。
 - 「依檔案」分頁把檔案分成 前端／後端／資料模型／其他（舊名 `資料庫` 仍可用，等於 `資料模型`）。工具認得的資料模型：`*.model.ts`／`*.schema.ts`／`*.types.ts`、`models/`／`dtos/`／`entities/` 目錄、`*Dto.cs`／`*Views.cs`／`*Entity.cs`、`Configurations/*Configuration.cs`、migration／ModelSnapshot／DbContext／SQL。其他命名的 Entity、enum、interface 要用 `kinds` 或 `files[path].kind` 指定。優先順序：`files[path].kind` > `kinds`（glob，`**` 跨目錄、`*` 單層）> 工具依副檔名與路徑猜。工具只看副檔名，分不出 Node／monorepo 的 `.js`／`.ts`。專案的 `.js`／`.ts` 同時有前後端時（看 `package.json` 依賴：`express`、`@nestjs/*`、`fastify` 是後端，`react`、`vue`、`@angular/*` 是前端；也看目錄結構），**必須**填 `kinds`。少數例外檔再用 `files[path].kind`。
 - `files[path].role`（選填）：檔案標題前的彩色標籤，共 12 類（見上方範例）。工具依路徑猜；猜錯時才填。讀者可在「顯示設定」選哪幾類預設收合（預設：測試、產生檔），點標籤可一次收合或展開同類檔案。

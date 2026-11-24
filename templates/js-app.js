@@ -61,7 +61,7 @@ function head() {
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
   s += '</header>';
-  s += '<div class="tabbar"><nav class="tabs">' + (HAS_OV ? '<a href="#overview" data-t="overview">功能總覽</a>' : '') + '<a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
+  s += '<div class="tabbar"><nav class="tabs">' + (HAS_OV ? '<a href="#overview" data-t="overview">功能總覽</a>' : '') + (HAS_SP ? '<a href="#spine" data-t="spine">主線</a>' : '') + '<a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
   return s;
 }
 // ---- display settings panel (button at the bottom of the sidebar) ----
@@ -211,6 +211,9 @@ function viewOverview() {
     var d = document.createElement('section'); d.className = 'card feat'; d.id = 'ov-f' + (i + 1);
     var st = ST[f.status];
     var links = (f.stations || []).map(function (id) { var r = stationRef(id); return r ? '<a href="#scenario" data-goto="s-' + h(id) + '"><span class="num">' + h(r.num) + '</span>' + h(r.s.title || id) + '</a>' : ''; }).filter(Boolean).join('　');
+    // the feature's spine comes first: read the whole path, then a station
+    var sp = f.spine && spineRef(f.spine);
+    if (sp) links = '<a href="#spine" data-gosp="p-' + h(sp.s.id) + '"><span class="num">主線</span>' + h(sp.s.title || sp.s.id) + '</a>' + (links ? '　' + links : '');
     d.innerHTML = '<div class="prose"><h3><span class="num">' + (i + 1) + '</span>' + h(f.title || '') + (st ? '<span class="chip ' + st[0] + '">' + st[1] + '</span>' : '') + '</h3><div class="three">'
       + (f.what ? '<div><b>能做什麼</b> <span class="v">' + inl(f.what) + '</span></div>' : '')
       + (f.why ? '<div><b>為什麼</b> <span class="v">' + inl(f.why) + '</span></div>' : '')
@@ -220,6 +223,48 @@ function viewOverview() {
   var list = function (title, xs) { return (xs || []).length ? '<div><b>' + title + '</b><ul>' + xs.map(function (x) { return '<li>' + inl(x) + '</li>'; }).join('') + '</ul></div>' : ''; };
   var rest = list('這次不做', G.outOfScope) + list('還不確定', G.unknowns);
   if (rest) { var e = document.createElement('section'); e.className = 'card'; e.id = 'ov-rest'; e.innerHTML = '<div class="prose"><h3>沒做的、不確定的</h3>' + rest + '</div>'; c.appendChild(e); toc += '<a href="#ov-rest" data-jump="ov-rest">沒做的、不確定的</a>'; }
+  // the reading order, stated where the reader starts
+  if (HAS_SP) { var rd = document.createElement('p'); rd.className = 'callout how'; rd.innerHTML = '<b>建議閱讀順序</b>：功能總覽 → <a href="#spine">主線</a>（每條約 5 分鐘，先看整條路）→ 依情境的站（需要細節時才往下讀）。'; c.insertBefore(rd, c.firstChild); }
+  return { node: c, toc: toc };
+}
+// ---- 主線: one per user action that writes data, from the button to the tables ----
+var HAS_SP = (G.spines || []).length > 0;
+function spineRef(id) { var out = null; (G.spines || []).forEach(function (s, i) { if (s.id === id) out = { s: s, n: i + 1 }; }); return out; }
+// evidence of a claim: a link to the code line, or an "unverified" chip
+function srcCell(x) {
+  if (x.ref) return '<a href="javascript:void 0" data-see="' + h(x.ref) + '" class="src">' + h(x.ref) + '</a>';
+  return x.unverified ? '<span class="chip unverified">未驗證</span>' : '';
+}
+function viewSpine() {
+  var c = document.createDocumentFragment(), toc = '';
+  (G.spines || []).forEach(function (s, i) {
+    var d = document.createElement('section'); d.className = 'card spine'; d.id = 'p-' + s.id;
+    var t = '<div class="prose"><h3><span class="num">' + (i + 1) + '</span>' + h(s.title || s.id) + '</h3>' + (s.text ? md(s.text) : '');
+    if (s.svg) t += '<div class="ct">流程圖</div><div class="er">' + s.svg + '</div>';
+    var steps = s.steps || [];
+    if (steps.length) {
+      t += '<div class="ct">步驟</div><table class="sp-t"><thead><tr><th>#</th><th>檔案</th><th>做什麼</th><th>寫入</th><th>出處</th></tr></thead><tbody>'
+        + steps.map(function (st, k) {
+          var r = st.file && refFile(st.file), fname = r ? r.path.slice(r.path.lastIndexOf('/') + 1) : (st.file || '');
+          var sr = st.station && stationRef(st.station);
+          return '<tr><td class="n">' + (k + 1) + '</td><td>' + (r ? '<a href="#files/' + h(r.id) + '" title="' + h(r.path) + '"><code>' + h(fname) + '</code></a>' : h(fname))
+            + (st.module ? '<div class="mod">' + h(st.module) + '</div>' : '') + '</td><td>' + inl(st.does || '')
+            + (sr ? ' <a href="#scenario" data-goto="s-' + h(st.station) + '" class="go">→ 站 ' + h(sr.num) + '</a>' : '') + '</td><td>'
+            + (st.writes ? '<b class="wr">⇒ ' + h(st.writes) + '</b>' : '') + '</td><td>' + srcCell(st) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+    if ((s.example || []).length) {
+      t += '<div class="ct">一筆範例資料</div>' + (s.exampleCase ? '<p>' + inl(s.exampleCase) + '</p>' : '') + '<table class="sp-t"><thead><tr><th>表</th><th>新增／修改</th><th>這一列</th><th>串到</th><th>出處</th></tr></thead><tbody>'
+        + s.example.map(function (r) { return '<tr><td><code>' + h(r.table) + '</code></td><td>' + h(r.op || '') + '</td><td>' + inl(r.row || '') + '</td><td>' + inl(r.link || '') + '</td><td>' + srcCell(r) + '</td></tr>'; }).join('') + '</tbody></table>';
+    }
+    if ((s.failure || []).length) {
+      t += '<div class="ct">失敗路徑</div><table class="sp-t"><thead><tr><th>哪一步失敗</th><th>會留下什麼</th><th>怎麼補救</th><th>出處</th></tr></thead><tbody>'
+        + s.failure.map(function (f) { return '<tr><td>' + inl(f.when || '') + '</td><td>' + inl(f.leaves || '') + '</td><td>' + inl(f.fix || '') + '</td><td>' + srcCell(f) + '</td></tr>'; }).join('') + '</tbody></table>';
+    }
+    if (s.recall) t += '<details class="recall"><summary><b>重述題</b>：' + inl(s.recall) + '</summary>' + (s.recallAnswer ? md(s.recallAnswer) : '<p>回到上面的步驟表與範例資料對答案。</p>') + '</details>';
+    d.innerHTML = t + '</div>';
+    c.appendChild(d); toc += '<a href="#p-' + h(s.id) + '" data-jump="p-' + h(s.id) + '">' + (i + 1) + '. ' + h(s.title || s.id) + '</a>';
+  });
   return { node: c, toc: toc };
 }
 var lgOff = null; // detaches the logic tab's scroll/resize listeners when the view is rebuilt
@@ -555,17 +600,17 @@ function doJump(fid, line, hid) {
 // ---- router ----
 var view = null, cur = null;
 function render() {
-  var hs = (location.hash || (HAS_OV ? '#overview' : '#scenario')).slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' || (hs[0] === 'overview' && HAS_OV) ? hs[0] : /^ov-/.test(hs[0]) && HAS_OV ? 'overview' : 'scenario';
+  var hs = (location.hash || (HAS_OV ? '#overview' : '#scenario')).slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' || (hs[0] === 'overview' && HAS_OV) || (hs[0] === 'spine' && HAS_SP) ? hs[0] : /^ov-/.test(hs[0]) && HAS_OV ? 'overview' : /^p-/.test(hs[0]) && HAS_SP ? 'spine' : 'scenario';
   if (cur !== tab) {
     BLOCKS.length = 0; if (lgOff) lgOff(); closePeek();
-    var v = tab === 'overview' ? viewOverview() : tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
+    var v = tab === 'overview' ? viewOverview() : tab === 'spine' ? viewSpine() : tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
     $toc.innerHTML = v.toc; cur = tab; spyOn = null;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs a'), function (a) { a.classList.toggle('on', a.dataset.t === tab); });
     var fs = document.getElementById('fsort'); if (fs) { fs.value = FSORT; fs.onchange = function () { FSORT = fs.value; lsSet('dg.fsort', FSORT); cur = null; render(); }; }
   }
   if (tab === 'files' && hs[1]) doJump(hs[1], hs[2], hs[3]);
-  else if (!hs[1] && hs[0] && !/^(overview|scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
+  else if (!hs[1] && hs[0] && !/^(overview|spine|scenario|files|mech|logic)$/.test(hs[0])) { var el = document.getElementById(hs[0]); if (el) el.scrollIntoView(); }
   spySoon();
 }
 // a station hidden by the current layer: switch to 整體, then scroll
@@ -594,8 +639,9 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all],[data-peek]') : null; if (!t) return;
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-gosp],[data-all],[data-peek]') : null; if (!t) return;
   if (t.dataset.peek) peekFile(t.dataset.peek);
+  else if (t.dataset.gosp) { e.preventDefault(); var pid = t.dataset.gosp; if (cur !== 'spine') location.hash = '#spine'; setTimeout(function () { var el = document.getElementById(pid); if (el) el.scrollIntoView(); }, 0); }
   else if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
   else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { scrollToId(gid); }, 0); }
