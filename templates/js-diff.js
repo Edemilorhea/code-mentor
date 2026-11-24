@@ -59,6 +59,45 @@ files.forEach(function (f) {
   f.hunks.forEach(function (x) { f._fmt += markFormat(x.lines, FMT_Q.test(f.path)); });
   FMT_TOTAL += f._fmt;
 });
+// ---- file role: a coloured tag in front of every file. guide.json files[path].role overrides the path guess.
+// Roles listed in FOLD_ROLES start collapsed (settings panel; default: tests and generated files).
+var ROLES = [
+  ['測試', '#ff5fd2', /(^|\/)(tests?|__tests__|unittests?|integrationtests?)\/|\.(test|spec)\.[cm]?[jt]sx?$|tests?\.cs$|fixture\.cs$/i],
+  ['產生檔', '#9aa4b2', /(^|\/)migrations\/|\.designer\.cs$|modelsnapshot\.cs$|(^|\/)efc?pt[\w.-]*\.json$|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.min\.(js|css)$/i],
+  ['前端元件', '#22d3ee', /\.(tsx|jsx|vue|svelte)$/i],
+  ['前端 Model', '#a3e635', /\.(models?|schema|types?|dto)\.[cm]?[jt]s$/i],
+  ['前端 Service', '#facc15', /\.(service|api)\.[cm]?[jt]s$|(^|\/)utils\/api\.[jt]s$|(^|\/)use[A-Z]\w*\.[jt]s$/],
+  ['API 入口', '#fb923c', /controller\.cs$|(^|\/)controllers?\//i],
+  ['後端 Command／Query', '#c084fc', /(command|query)(handler)?\.cs$|(^|\/)(commands|queries)\//i],
+  ['後端 Model', '#4ade80', /(^|\/)(models|entities|enums|viewmodels|dtos?)\/|(view|dto|request|response|result)\.cs$/i],
+  ['後端 Service', '#f472b6', /(service|policy|repository)\.cs$/i],
+  ['DB 設定', '#38bdf8', /(^|\/)configurations\/|context\.cs$/i],
+  ['設定／資料', '#fbbf24', /\.(json|ya?ml|csproj|config|docx|xlsx|env\.example)$/i],
+  ['其他', '#94a3b8', /$/]
+];
+var ROLE_C = {}; ROLES.forEach(function (r) { ROLE_C[r[0]] = r[1]; });
+var RCACHE = {};
+function roleOf(f) {
+  if (RCACHE[f.path]) return RCACHE[f.path];
+  var o = ((typeof G !== 'undefined' && G.files) || {})[f.path], k = o && ROLE_C[o.role] ? o.role : null;
+  if (!k) k = f.generated ? '產生檔' : ROLES.filter(function (r) { return r[2].test(f.path); })[0][0];
+  return (RCACHE[f.path] = k);
+}
+function roleTag(f) { var k = roleOf(f); return '<button type="button" class="rt" data-role="' + h(k) + '" style="--c:' + ROLE_C[k] + '" title="' + h(k) + '：點一下收合或展開所有同類檔案">' + h(k) + '</button>'; }
+var FOLD_ROLES = (function () { var v = lsGet('dg.foldroles', null); return v == null ? { '測試': 1, '產生檔': 1 } : v.split('|').reduce(function (a, k) { if (k) a[k] = 1; return a; }, {}); })();
+function setFoldRole(k, on) { if (on) FOLD_ROLES[k] = 1; else delete FOLD_ROLES[k]; lsSet('dg.foldroles', Object.keys(FOLD_ROLES).join('|')); }
+// tag click: every block of that role follows this one (open ones close, else all open)
+document.addEventListener('click', function (e) {
+  var t = e.target.closest && e.target.closest('.blk .rt'); if (!t) return;
+  e.preventDefault(); e.stopPropagation();
+  var b0 = t.closest('.blk'), open = b0.dataset.open !== '1';
+  setRoleOpen(t.dataset.role, open);
+  if (!open) b0.keepTop(function () {});
+}, true);
+// open or close every block of one role now (tag click, 預設收合 switch)
+function setRoleOpen(k, open) {
+  BLOCKS.forEach(function (b) { if (b.isConnected && roleOf(byId[b.dataset.file]) === k && (b.dataset.open === '1') !== open) b.setOpen(open, open); });
+}
 var KL = { why: '為什麼', good: '好處', risk: '風險', bug: '問題', info: '說明', what: '改了什麼', how: '怎麼改', syntax: '語法／用法' };
 
 // ---- notes ----
@@ -304,10 +343,10 @@ function mkBlock(ref, notes, opts) {
   var r = resolve(ref); if (!r) return null;
   var f = r.file, g = (D.guideFiles || {})[f.path] || (G.files || {})[f.path] || {}, d = document.createElement('div');
   d.className = 'blk'; d.dataset.file = f.id; d.dataset.hunk = r.hunk ? r.hunk.id : ''; d._notes = notes || []; d._gaps = {}; d._ov = null; d._fv = null; d._unfold = {};
-  var open = !(f.generated && !(opts && opts.forceOpen));
+  var open = (opts && opts.forceOpen) || !(f.generated || FOLD_ROLES[roleOf(f)]);
   d.dataset.open = open ? '1' : '0';
-  var tags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (f._fmt && f._fmt === f.additions + f.deletions ? '<span class="flag">僅格式化</span>' : '');
-  d.innerHTML = '<div class="fh"><span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
+  var tags = (f.generated && roleOf(f) !== '產生檔' ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (f._fmt && f._fmt === f.additions + f.deletions ? '<span class="flag">僅格式化</span>' : '');
+  d.innerHTML = '<div class="fh">' + roleTag(f) + '<span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
     + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="pk" data-peek="' + h(f.id) + '" title="在右側視窗看整個檔案與全部說明（核心＋細部），不離開目前頁面">側窗</button><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
     + (f.generated && (g.explain || g.summary) ? '<div class="explain">' + (g.summary ? '<b>' + inl(g.summary) + '</b>' : '') + md(g.explain) + '</div>' : '')
     + '<div class="bd" style="position:relative"></div><div class="rz" title="拖曳調整所有 diff 寬度，雙擊還原"></div>';
@@ -433,13 +472,15 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
   });
 })();
 
-// ---- floating toolbar: controls the block nearest the viewport's vertical center ----
+// ---- floating toolbar: controls the block nearest the viewport's vertical center; while the side window is open, its block ----
 (function () {
   var tb = document.getElementById('dtb'); if (!tb) return;
   var cur = null, raf = 0;
   function q(s) { return tb.querySelector(s); }
   function midY() { return window.innerHeight / 2; }
+  function peekBlk() { return document.querySelector('.dg-peek:not([hidden]) .blk'); }
   function pick() {
+    var pb = peekBlk(); if (pb) return pb;
     var y = midY(), best = null, bd = Infinity;
     BLOCKS.forEach(function (b) {
       if (!b.isConnected || !b.offsetParent) return;
@@ -486,7 +527,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     if (!btn) return;
     var h0 = cur.offsetHeight;
     btn.click();
-    if (dir < 0) window.scrollBy(0, cur.offsetHeight - h0); // keep the line being read in place
+    if (dir < 0) { var dy = cur.offsetHeight - h0, pc = cur.closest('.dg-peek .pc'); if (pc) pc.scrollTop += dy; else window.scrollBy(0, dy); } // keep the line being read in place
     update();
   }
   function update() {
@@ -502,6 +543,10 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     // full text, or a symbol in compact mode; the tooltip always carries the full meaning
     var lab = function (a, full, short) { var el = q('[data-tb=' + a + ']'); if (el.dataset.tip == null) el.dataset.tip = el.title || ''; el.textContent = C ? short : full; el.title = el.dataset.tip || full; };
     lab('open', open ? '收合檔案' : '展開檔案', open ? '▾' : '▸');
+    var inPeek = !!cur.closest('.dg-peek');
+    lab('peek', inPeek ? '關閉側窗' : '開側窗', inPeek ? '✕' : '⧉');
+    q('[data-tb=peek]').classList.toggle('on', inPeek);
+    q('[data-tb=mode]').disabled = inPeek; // the side window is too narrow for side-by-side
     lab('mode', modeOf(cur) === 'sbs' ? '改單欄' : '改並排', modeOf(cur) === 'sbs' ? '▤' : '◫');
     lab('full', fullOf(cur) ? '只看重點' : '看完整', fullOf(cur) ? '◎' : '▣');
     lab('wrap', wrapOf(cur) ? '不換行' : '自動換行', wrapOf(cur) ? '→' : '↩');
@@ -519,13 +564,15 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     var id = cur.dataset.file;
     if (v === CODEFS) delete FS[id]; else FS[id] = v;
     // the same file can appear in several stations: resize every block of this file
-    BLOCKS.forEach(function (b) { if (b.dataset.file === id) { if (v === CODEFS) b.style.removeProperty('--fs-code'); else b.style.setProperty('--fs-code', v + 'px'); } });
+    // the side window's block is not in BLOCKS
+    BLOCKS.concat(peekBlk() || []).forEach(function (b) { if (b.dataset.file === id) { if (v === CODEFS) b.style.removeProperty('--fs-code'); else b.style.setProperty('--fs-code', v + 'px'); } });
   }
   function later() { if (!raf) raf = requestAnimationFrame(update); }
   tb.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tb]'); if (!t || !cur) return;
     var a = t.dataset.tb;
     if (a === 'open') cur.toggle();
+    else if (a === 'peek') { if (cur.closest('.dg-peek')) closePeek(); else peekFile(cur.dataset.file); }
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
     else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); sxFit(cur); }
@@ -536,7 +583,9 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     else if (a === 'c20' || a === 'call') return collapse(a === 'call');
     update();
   });
-  window.addEventListener('scroll', later, { passive: true });
+  // capture: also the side window's own scroll area
+  document.addEventListener('scroll', later, { passive: true, capture: true });
+  document.addEventListener('keydown', function () { setTimeout(later, 0); }); // Esc closes the side window
   window.addEventListener('resize', later);
   window.addEventListener('hashchange', function () { setTimeout(later, 50); });
   document.addEventListener('click', function () { setTimeout(later, 0); });

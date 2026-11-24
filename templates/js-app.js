@@ -82,11 +82,17 @@ document.addEventListener('click', function (e) {
   if (t.dataset.sz === 'ui') setUi(d ? UI + d * 0.05 : 1); else setCodeFs(d ? CODEFS + d : 14);
   document.getElementById('dpnl').innerHTML = panelHtml();
 });
+// the 預設收合 list stays open across panel re-renders while the page is open
+var FR_OPEN = false;
+document.addEventListener('toggle', function (e) { if (e.target.classList && e.target.classList.contains('frd')) FR_OPEN = e.target.open; }, true);
 function panelHtml() {
   return '<div class="ph">Diff</div>'
     + sw('set-sbs', VIEW.mode === 'sbs', '並排顯示', '關閉時為單欄')
     + sw('set-full', VIEW.full, '顯示完整檔案', '關閉時只顯示註解附近的重點')
     + (FMT_TOTAL ? sw('fmtck', VIEW.hideFmt, '隱藏格式化差異 <span class="n">' + FMT_TOTAL + ' 行</span>', '只改了換行、縮排、空白、單雙引號或結尾逗號的行不顯示；整段或整個檔案都是格式化時一起隱藏。有註解的地方不隱藏。') : '')
+    // one row that opens the 12 role switches; the summary names what is folded now
+    + '<details class="frd"' + (FR_OPEN ? ' open' : '') + '><summary title="選哪幾類檔案一開始就收合；切換時畫面上的同類檔案也馬上收合或展開。記在這個瀏覽器。"><span class="tx">預設收合</span><span class="n">' + h(Object.keys(FOLD_ROLES).join('、') || '無') + '</span></summary>'
+    + ROLES.map(function (r, i) { return sw('set-fr-' + i, !!FOLD_ROLES[r[0]], '<span class="rt" style="--c:' + r[1] + '">' + h(r[0]) + '</span>', '打開：這類檔案馬上收合，以後開報告也收合；關閉：馬上展開'); }).join('') + '</details>'
     + '<div class="ph">文字大小</div>'
     + sz('ui', '介面文字', Math.round(UI * 100) + '%', '標題、說明、側欄、按鈕；不含程式碼')
     + sz('code', '所有程式碼', CODEFS + 'px', '一次調整所有 diff 的字級；工具列的 A− A+ 只調整單一檔案')
@@ -114,6 +120,7 @@ document.addEventListener('change', function (e) {
     if (v && !window.confirm('所有已展開的區塊都會改成顯示完整檔案，長檔案會讓頁面變長、變慢。要繼續嗎？')) { t.checked = false; return; }
     setGlobalFull(v);
   } else if (t.id === 'set-tb') { VIEW.tb = v ? 'compact' : 'full'; lsSet('dg.tb', v ? 'compact' : ''); window.dispatchEvent(new Event('resize')); }
+  else if (/^set-fr-\d+$/.test(t.id)) { var rk = ROLES[+t.id.slice(7)][0]; setFoldRole(rk, v); setRoleOpen(rk, !v); var fn = t.closest('details').querySelector('summary .n'); fn.textContent = Object.keys(FOLD_ROLES).join('、') || '無'; }
   else if (t.id === 'set-textw') { TEXTW = v ? 'fill' : 'read'; lsSet('dg.textw', v ? '' : 'read'); applyTextW(); }
 });
 
@@ -402,7 +409,7 @@ function viewFiles() {
     var tot = f.additions + f.deletions, w = Math.max(6, Math.round(90 * tot / max)), aw = tot ? Math.round(100 * f.additions / tot) : 0;
     var flags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (!refs.length && !g.skip ? '<span class="flag">未提及</span>' : '') + (g.skip ? '<span class="flag">略過</span>' : '');
     var row = document.createElement('div'); row.className = 'frow';
-    row.innerHTML = '<span class="nm">' + (FSORT === 'size' ? h(f.path) : fileName(f)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
+    row.innerHTML = '<span class="rt" style="--c:' + ROLE_C[roleOf(f)] + '">' + h(roleOf(f)) + '</span><span class="nm">' + (FSORT === 'size' ? h(f.path) : fileName(f)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
       + '<span class="refs">' + refs.map(function (u) { return '<a href="#' + (u.mech ? 'mech' : 'scenario') + '" data-jump="' + (u.mech ? 'm-' : 's-') + h(u.s.id) + '">' + h(u.s.title || u.s.id) + '</a>'; }).join('') + '</span>' + (g.summary ? '<span class="meta" style="flex-basis:100%">' + inl(g.summary) + '</span>' : '');
     wrap.appendChild(row);
     var holder = document.createElement('div'); wrap.appendChild(holder);

@@ -74,6 +74,13 @@ b,strong{font-weight:600;color:var(--fg)}
 .sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--fg);transition:transform .15s}
 .sw input:checked+i{background:var(--accent-fill)}.sw input:checked+i::after{transform:translateX(14px);background:var(--on-accent)}
 .sw input:focus-visible+i{outline:2px solid var(--accent);outline-offset:2px}
+/* 預設收合: one row in the panel; opening it shows the role switches, indented */
+.frd>summary{display:flex;align-items:center;gap:8px;padding:8px 0;font-size:calc(14px*var(--ui));color:var(--fg);cursor:pointer;list-style:none}
+.frd>summary::-webkit-details-marker{display:none}
+.frd>summary .n{flex:1;min-width:0;text-align:right;color:var(--faint);font-size:calc(12.5px*var(--ui));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frd>summary::after{content:"▸";color:var(--muted);transition:transform .12s}
+.frd[open]>summary::after{transform:rotate(90deg)}
+.frd>.sw{padding:5px 0 5px 12px}
 .sz{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;font-size:var(--fs-sm);color:var(--fg)}
 .sz .ctl{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
 .sz button{appearance:none;width:30px;height:28px;border:0;background:var(--surface);color:var(--fg);cursor:pointer;font:500 var(--fs-sm)/1 var(--font-sans)}
@@ -159,7 +166,11 @@ details.commits{font-size:var(--fs-sm);margin:8px 0;color:var(--muted)}
 .blk>.rz{position:absolute;top:0;right:0;width:8px;height:100%;cursor:ew-resize;z-index:3;touch-action:none}
 .blk>.rz:hover,.blk.rzing>.rz{background:var(--accent-fill);opacity:.5}
 .fh{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 14px 8px 12px;background:var(--sunken);border-bottom:1px solid var(--line);font:400 calc(12.5px*var(--ui))/1.4 var(--font-mono);color:var(--muted);cursor:pointer}
-.fh .p{color:var(--fg);font-weight:500;overflow-wrap:anywhere}.fh .st{color:var(--faint)}
+.fh .p{color:var(--fg);font-weight:500;overflow-wrap:anywhere}
+/* file role tag: neon colour per kind (ROLES in js-diff.js) */
+.rt{appearance:none;display:inline-flex;align-items:center;flex:none;padding:2px 8px;border-radius:999px;font:700 calc(11px*var(--ui))/1.3 var(--font-sans);white-space:nowrap;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 55%,transparent);box-shadow:0 0 8px color-mix(in srgb,var(--c) 30%,transparent)}
+button.rt{cursor:pointer}button.rt:hover{background:color-mix(in srgb,var(--c) 26%,transparent)}
+[data-theme=light] .rt{color:color-mix(in srgb,var(--c) 60%,#000);box-shadow:none}.fh .st{color:var(--faint)}
 .fh .add,.keyline .add{color:var(--new);font-weight:600}.fh .del{color:var(--risk);font-weight:600}.fh .sp{flex:1}
 .fh button,.tools select{appearance:none;font:500 calc(12px*var(--ui))/1 var(--font-sans);border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);border-radius:6px;padding:5px 9px;cursor:pointer}
 .fh button:hover{background:var(--sunken)}

@@ -40,6 +40,7 @@
   "files": {
     "path/to/file": {
       "kind": "前端|後端|資料模型|其他",
+      "role": "測試|產生檔|前端元件|前端 Model|前端 Service|API 入口|後端 Command／Query|後端 Model|後端 Service|DB 設定|設定／資料|其他",
       "summary": "", "explain": "", "skip": "略過原因", "skipHunks": ["f3#4"],
       "mapping": [{ "from": "f5#1:20", "to": "f9#1:14", "text": "Entity 這行產生 migration 那行" }]
     }
@@ -73,6 +74,7 @@
   ```
 - 報告上方的下拉選單有四種檢視：整體（全部檔案、只顯示 core）、前端、後端、資料模型（只顯示那一類檔案，core 加 detail）。資料模型檔另依副檔名歸邊：`ts`／`tsx`／`js`／`vue` 也出現在「前端」，其他也出現在「後端」。
 - 「依檔案」分頁把檔案分成 前端／後端／資料模型／其他（舊名 `資料庫` 仍可用，等於 `資料模型`）。工具認得的資料模型：`*.model.ts`／`*.schema.ts`／`*.types.ts`、`models/`／`dtos/`／`entities/` 目錄、`*Dto.cs`／`*Views.cs`／`*Entity.cs`、`Configurations/*Configuration.cs`、migration／ModelSnapshot／DbContext／SQL。其他命名的 Entity、enum、interface 要用 `kinds` 或 `files[path].kind` 指定。優先順序：`files[path].kind` > `kinds`（glob，`**` 跨目錄、`*` 單層）> 工具依副檔名與路徑猜。工具只看副檔名，分不出 Node／monorepo 的 `.js`／`.ts`。專案的 `.js`／`.ts` 同時有前後端時（看 `package.json` 依賴：`express`、`@nestjs/*`、`fastify` 是後端，`react`、`vue`、`@angular/*` 是前端；也看目錄結構），**必須**填 `kinds`。少數例外檔再用 `files[path].kind`。
+- `files[path].role`（選填）：檔案標題前的彩色標籤，共 12 類（見上方範例）。工具依路徑猜；猜錯時才填。讀者可在「顯示設定」選哪幾類預設收合（預設：測試、產生檔），點標籤可一次收合或展開同類檔案。
 - `files[path].mapping`：Entity 設定行 ↔ Migration 語法行的對照，`from`／`to` 格式同 `see`。
 - `check` 會驗證：`to` ≥ `line` 且兩端在 hunk 內；`see`／`mapping` 的目標存在；`tier` 只能是 `core`／`detail`；`chain` 是字串。`導讀`／`教學` 的站跨兩個以上檔案沒有 `chain`、或只有 detail 沒有 core 時會警告。
 - `logic`（選填）：「邏輯導讀」分頁，一個 section 講一個核心方法群。不參與覆蓋檢查（覆蓋仍由 stations 負責）。
