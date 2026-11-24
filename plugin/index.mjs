@@ -92,7 +92,7 @@ export default {
           const depth = depthOf(argument);
           const depthLine = depth
             ? `深度等級：${depth}（使用者用參數指定，以此為準）`
-            : '深度等級：未用參數指定。依 code-mentor skill 第 0.5 節從使用者的話判斷，判斷不出來就用「導讀」。';
+            : '深度等級：未用參數指定。依 code-mentor skill「深度等級」從使用者的話判斷，判斷不出來就用「導讀」。';
           const res = await ctx.skill.list();
           const list = Array.isArray(res) ? res : (res?.data ?? []);
           const has = id => (list.some(s => s.id === id || s.name === id) ? '有' : '沒有');
@@ -105,7 +105,7 @@ export default {
 
 ${depthLine}
 
-依 code-mentor skill 第 0 節「內容大腦」選擇路徑，依第 0.5 節決定深度等級並寫進 guide.json 的 depth。操作 diff 一律用 code_mentor 工具（collect、show、check、build），不要另外用 shell 呼叫 code-mentor CLI。`;
+依 code-mentor skill「內容大腦」選擇路徑，依「深度等級」決定等級並寫進 guide.json 的 depth。操作 diff 一律用 code_mentor 工具（collect、show、check、build），不要另外用 shell 呼叫 code-mentor CLI。`;
           await ctx.session.prompt({ sessionID: invocation.sessionID, text, delivery: invocation.delivery });
         },
       });
