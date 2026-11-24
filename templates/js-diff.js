@@ -308,7 +308,7 @@ function mkBlock(ref, notes, opts) {
   d.dataset.open = open ? '1' : '0';
   var tags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (f._fmt && f._fmt === f.additions + f.deletions ? '<span class="flag">僅格式化</span>' : '');
   d.innerHTML = '<div class="fh"><span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
-    + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
+    + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="pk" data-peek="' + h(f.id) + '" title="在右側視窗看整個檔案與全部說明（核心＋細部），不離開目前頁面">側窗</button><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
     + (f.generated && (g.explain || g.summary) ? '<div class="explain">' + (g.summary ? '<b>' + inl(g.summary) + '</b>' : '') + md(g.explain) + '</div>' : '')
     + '<div class="bd" style="position:relative"></div><div class="rz" title="拖曳調整所有 diff 寬度，雙擊還原"></div>';
   var fh = d.querySelector('.fh'), bd = d.querySelector('.bd'), fd = d.querySelector('.fd'), tg = d.querySelector('.tg');
@@ -319,6 +319,7 @@ function mkBlock(ref, notes, opts) {
   // bring its header back to the top of the screen
   function keepTop(fn) {
     fn();
+    if (d.closest('.dg-peek')) return; // the side window scrolls by itself, the page must not move
     var r = d.getBoundingClientRect(), tabs = document.querySelector('.tabbar'), off = (tabs ? tabs.offsetHeight : 0) + 8;
     if (r.top < off) window.scrollBy(0, r.top - off);
   }
@@ -331,9 +332,16 @@ function mkBlock(ref, notes, opts) {
   // lazy: hand rendering to the viewport observer (expand-all), instead of rendering now
   function setOpen(v, lazy) { d.dataset.open = v ? '1' : '0'; bd.style.display = v ? '' : 'none'; fd.textContent = v ? '收合' : '展開'; if (v) { if (lazy && io) io.observe(d); else fillBlock(d); } }
   d.setOpen = setOpen;
+  // one file opened or closed by the reader: flash its header, because closing can move the page (keepTop)
+  // and the eye has to find the file again. Not used by collapse-all / expand-all.
+  function toggle() {
+    if (d.dataset.open === '1') keepTop(function () { setOpen(false); }); else setOpen(true);
+    fh.classList.remove('flash'); void fh.offsetWidth; fh.classList.add('flash');
+  }
+  d.toggle = toggle;
   fh.addEventListener('click', function (e) {
     var t = e.target; if (t.tagName === 'A' || (t.tagName === 'BUTTON' && t !== fd)) return;
-    if (d.dataset.open === '1') keepTop(function () { setOpen(false); }); else setOpen(true);
+    toggle();
   });
   tg.addEventListener('click', function () { d._ov = modeOf(d) === 'sbs' ? 'inline' : 'sbs'; if (d.dataset.open !== '1') setOpen(true); else fillBlock(d); });
   // the column scrollbars move their column's text; a sideways wheel / trackpad swipe over code drives that column's scrollbar
@@ -517,7 +525,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
   tb.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tb]'); if (!t || !cur) return;
     var a = t.dataset.tb;
-    if (a === 'open') { var c0 = cur; if (c0.dataset.open === '1') c0.keepTop(function () { c0.setOpen(false); }); else c0.setOpen(true); }
+    if (a === 'open') cur.toggle();
     else if (a === 'mode') cur.querySelector('.tg').click();
     else if (a === 'full') cur.querySelector('.fv').click();
     else if (a === 'wrap') { cur._wrap = !wrapOf(cur); cur.classList.toggle('wrapall', cur._wrap); sxFit(cur); }

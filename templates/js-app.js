@@ -423,16 +423,43 @@ var FWRAPS = [];
 function openFile(wrap, f, keepOpen, lazy) {
   var holder = wrap.lastChild;
   if (holder.firstChild) { if (keepOpen) return holder.firstChild; holder.innerHTML = ''; return null; }
-  var g = (G.files || {})[f.path] || {};
-  var b = mkBlock(f.id, visibleNotes(allNotesOf(f)), { forceOpen: true });
-  b.dataset.open = '1';
-  var pre = document.createElement('div');
-  pre.innerHTML = schemaHtml(f) + mappingHtml(f);
-  b.querySelector('.fh').insertAdjacentHTML('afterend', pre.innerHTML);
-  holder.appendChild(b); b.querySelector('.fd').textContent = '收合';
+  var b = fileBlock(f, visibleNotes(allNotesOf(f)));
+  holder.appendChild(b);
   if (lazy && io) io.observe(b); else fillBlock(b, true);
   return b;
 }
+// a whole file, open, with its schema and mapping tables under the header
+function fileBlock(f, notes) {
+  var b = mkBlock(f.id, notes, { forceOpen: true });
+  b.dataset.open = '1';
+  b.querySelector('.fh').insertAdjacentHTML('afterend', schemaHtml(f) + mappingHtml(f));
+  b.querySelector('.fd').textContent = '收合';
+  return b;
+}
+
+// ---- side window: one file's whole diff with every note (core and detail), without leaving the current view.
+// It stays open: another file's button replaces its content. Closed by ✕, Esc, or a tab / layer change (the page re-renders).
+var PEEK = null;
+function peekFile(fid) {
+  var f = byId[fid]; if (!f) return;
+  if (!PEEK) {
+    PEEK = document.createElement('aside'); PEEK.className = 'dg-peek'; PEEK.setAttribute('aria-label', '側窗：檔案與全部說明');
+    PEEK.innerHTML = '<div class="ph"><span class="nm"></span><button type="button" class="px" title="關閉（Esc）" aria-label="關閉側窗">✕</button></div><div class="pc"></div>';
+    PEEK.querySelector('.px').addEventListener('click', closePeek);
+    document.body.appendChild(PEEK);
+  }
+  if (PEEK.dataset.file === fid && !PEEK.hidden) return;
+  PEEK.dataset.file = fid; PEEK.hidden = false;
+  var nm = PEEK.querySelector('.nm'); nm.textContent = f.path; nm.title = f.path;
+  var b = fileBlock(f, allNotesOf(f));
+  // the window is too narrow for side-by-side; the floating toolbar and the page-wide buttons leave this block alone
+  b._ov = 'inline'; b.querySelector('.tg').textContent = '顯示：單欄';
+  BLOCKS.splice(BLOCKS.indexOf(b), 1);
+  var pc = PEEK.querySelector('.pc'); pc.innerHTML = ''; pc.appendChild(b); pc.scrollTop = 0;
+  fillBlock(b, true);
+}
+function closePeek() { if (PEEK) { PEEK.hidden = true; PEEK.querySelector('.pc').innerHTML = ''; PEEK.dataset.file = ''; } }
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePeek(); });
 
 // ---- jump (see / mapping): expand file in files tab, highlight the right side's cell ----
 function jumpTo(see) {
@@ -462,7 +489,7 @@ var view = null, cur = null;
 function render() {
   var hs = (location.hash || (HAS_OV ? '#overview' : '#scenario')).slice(1).split('/'), tab = hs[0] === 'files' || hs[0] === 'mech' || hs[0] === 'logic' || (hs[0] === 'overview' && HAS_OV) ? hs[0] : /^ov-/.test(hs[0]) && HAS_OV ? 'overview' : 'scenario';
   if (cur !== tab) {
-    BLOCKS.length = 0; if (lgOff) lgOff();
+    BLOCKS.length = 0; if (lgOff) lgOff(); closePeek();
     var v = tab === 'overview' ? viewOverview() : tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
     $toc.innerHTML = v.toc; cur = tab; spyOn = null;
@@ -499,8 +526,9 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all]') : null; if (!t) return;
-  if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-all],[data-peek]') : null; if (!t) return;
+  if (t.dataset.peek) peekFile(t.dataset.peek);
+  else if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }
   else if (t.dataset.goto) { e.preventDefault(); var gid = t.dataset.goto; if (cur !== 'scenario') location.hash = '#scenario'; setTimeout(function () { scrollToId(gid); }, 0); }
   else if (t.dataset.jump) {
