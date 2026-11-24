@@ -6,7 +6,7 @@
   --font-sans:"Geist","Inter","Noto Sans TC","Microsoft JhengHei",ui-sans-serif,system-ui,sans-serif;
   --font-mono:"Geist Mono","JetBrains Mono",ui-monospace,Consolas,"Cascadia Mono",monospace;
   --radius:12px;--radius-sm:8px;
-  --bg:#09090b;--surface:#111114;--sunken:#17171c;--line:#24242b;--line-strong:#34343e;
+  --bg:#09090b;--side:#101013;--surface:#111114;--sunken:#17171c;--line:#24242b;--line-strong:#34343e;
   --fg:#ededf1;--muted:#a0a0ad;--faint:#80808d;
   --accent:#b3a8ff;--accent-fill:#8d7dff;--accent-soft:#211d45;--on-accent:#09090b;
   --new:#4fd18b;--new-soft:#122a1f;--risk:#f2626a;--risk-soft:#2c1418;--decide:#f2b544;--decide-soft:#2e2412;
@@ -19,7 +19,7 @@
 @media(min-width:720px){:root{--gutter:32px}}
 /* theme: js sets data-theme from the saved choice or the system preference */
 :root[data-theme=light]{
-  --bg:#fafafb;--surface:#fff;--sunken:#f3f3f7;--line:#e5e5ec;--line-strong:#d3d3dd;--fg:#0b0b10;--muted:#555563;--faint:#666674;
+  --bg:#fafafb;--side:#f1f1f5;--surface:#fff;--sunken:#f3f3f7;--line:#e5e5ec;--line-strong:#d3d3dd;--fg:#0b0b10;--muted:#555563;--faint:#666674;
   --accent:#4231d6;--accent-fill:#5a48ee;--accent-soft:#eeebff;--on-accent:#fff;
   --new:#157a44;--new-soft:#e6f4ec;--risk:#c62a36;--risk-soft:#fcebec;--decide:#9a5b00;--decide-soft:#fbf0dc;
   --code-bg:#f6f6f9;--c-kw:#8a2fc4;--c-str:#2f7d32;--c-fn:#2557c9;--c-com:#666674;--c-num:#b5481f;--c-attr:#9a5b00;
@@ -42,12 +42,17 @@ b,strong{font-weight:600;color:var(--fg)}
 .dg-main{min-width:0}
 /* keep content off the screen edges: text running edge to edge is tiring to read */
 @media(min-width:1160px){.dg-main{padding-inline:48px}}
-/* sidebar width follows the window: 18% of it, at least 230px, at most 360px */
-:root{--toc-w:clamp(230px,18vw,360px)}
+/* sidebar width follows the window: 15% of it, at least 210px, at most 290px; dragging its edge sets --toc-w (js-diff.js) */
+:root{--toc-w:clamp(210px,15vw,290px)}
+/* the sidebar reaches the left screen edge and the full height, on its own slightly different background */
 @media(min-width:1160px){.dg-doc{display:grid;grid-template-columns:var(--toc-w) minmax(0,1fr);gap:32px}
-.dg-toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;padding-block:56px 120px;scrollbar-width:thin}}
+.dg-toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;margin-left:calc(-1*var(--gutter));padding:56px 8px 120px var(--gutter);box-sizing:border-box;background:var(--side);border-right:1px solid var(--line);scrollbar-width:thin}}
 @media(max-width:1159.98px){.dg-toc{display:none}}
 .toc-off .dg-doc{display:block}.toc-off .dg-toc{display:none}
+.toc-rz{position:fixed;top:0;bottom:0;left:calc(var(--gutter) + var(--toc-w) - 3px);width:7px;z-index:30;cursor:col-resize}
+.toc-rz:hover,.toc-rz.on{background:linear-gradient(90deg,transparent 2px,var(--accent-fill) 2px,var(--accent-fill) 4px,transparent 4px)}
+@media(max-width:1159.98px){.toc-rz{display:none}}
+.toc-off .toc-rz{display:none}
 /* top-left: sidebar toggle + theme, icon buttons (the sidebar toggle shows "close" while open, "open" while closed) */
 .dg-fab{position:fixed;top:10px;left:var(--gutter);z-index:25;display:flex;gap:6px}
 .dg-fab button,.dg-set>button{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:34px;min-width:34px;padding:0 8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);border-radius:8px;cursor:pointer;font:500 calc(13px*var(--ui))/1 var(--font-sans)}

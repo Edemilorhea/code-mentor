@@ -28,6 +28,18 @@ var VIEW = { mode: lsGet('dg.mode', 'inline') === 'sbs' ? 'sbs' : 'inline', full
     b = document.querySelector('[data-ui=toc]'); if (b) label(b, off ? ICON.open : ICON.close, off ? '顯示側欄' : '收合側欄');
   }
   apply();
+  // sidebar width: drag the handle on its right edge (180–480px), double-click to go back to the automatic width
+  var tw = +lsGet('dg.tocw', 0); if (tw) root.style.setProperty('--toc-w', tw + 'px');
+  var rz = document.createElement('div'); rz.className = 'toc-rz'; rz.title = '拖曳調整側欄寬度，雙擊還原';
+  document.body.appendChild(rz);
+  rz.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); rz.setPointerCapture(e.pointerId); rz.classList.add('on');
+    var g = parseFloat(getComputedStyle(root).getPropertyValue('--gutter')) || 0;
+    function mv(ev) { tw = Math.round(Math.min(480, Math.max(180, ev.clientX - g))); root.style.setProperty('--toc-w', tw + 'px'); }
+    function up() { rz.classList.remove('on'); rz.removeEventListener('pointermove', mv); rz.removeEventListener('pointerup', up); lsSet('dg.tocw', String(tw)); window.dispatchEvent(new Event('resize')); }
+    rz.addEventListener('pointermove', mv); rz.addEventListener('pointerup', up);
+  });
+  rz.addEventListener('dblclick', function () { root.style.removeProperty('--toc-w'); lsSet('dg.tocw', ''); window.dispatchEvent(new Event('resize')); });
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-ui]'); if (!t) return;
     var u = t.dataset.ui;
