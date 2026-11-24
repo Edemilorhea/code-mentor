@@ -138,10 +138,6 @@ function fileLabel(f) { var l = FLABEL[f.id]; return (l.dir ? '<span class="pd">
 // a file under it has a file icon and only its name (the heading already says where it is)
 var IC_DIR = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4l1.5 1.5h7.5v8h-13z"/></svg>';
 var IC_FILE = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z M9.5 1.5v3h3"/></svg>';
-function dirLabel(dir) {
-  var i = dir.lastIndexOf('/');
-  return IC_DIR + '<span class="dt">' + (i >= 0 ? '<span class="pd">' + h(dir.slice(0, i + 1)).replace(/\//g, '/<wbr>') + '</span>' : '') + '<b>' + h(dir.slice(i + 1)) + '</b></span>';
-}
 function fileName(f) { return IC_FILE + '<span class="fn">' + h(f.path.slice(f.path.lastIndexOf('/') + 1)) + '</span>'; }
 function stationCard(u, nums, sc) {
   var s = u.s, d = document.createElement('section'), num = nums ? nums[s.id] : '';
@@ -398,20 +394,9 @@ function viewFiles() {
   var key = function (f) { return (FSORT === 'kind' ? KINDS.indexOf(kindOf(f.path)) + '\u0000' : '') + dirOf(f.path) + '\u0000' + f.path; };
   if (FSORT === 'size') list.sort(function (a, b) { return (b.additions + b.deletions) - (a.additions + a.deletions); });
   else list.sort(function (a, b) { return key(a) < key(b) ? -1 : 1; }); // sort by dir first so each group stays contiguous
-  var max = Math.max.apply(null, [1].concat(files.map(function (f) { return f.additions + f.deletions; }))), lastDir = null, lastKind = null;
-  list.forEach(function (f) {
-    if (FSORT === 'kind' && kindOf(f.path) !== lastKind) {
-      lastKind = kindOf(f.path); lastDir = null;
-      var n = list.filter(function (x) { return kindOf(x.path) === lastKind; }).length;
-      var kh = document.createElement('h3'); kh.className = 'kind'; kh.textContent = lastKind + '（' + n + '）'; c.appendChild(kh);
-      toc += '<div class="grp kind">' + h(lastKind) + '（' + n + '）</div>';
-    }
-    var dir = FSORT === 'size' ? null : dirOf(f.path);
-    if (dir !== null && dir !== lastDir) {
-      var dh = document.createElement('div'); dh.className = 'dir'; dh.title = dir; dh.innerHTML = dirLabel(dir); c.appendChild(dh); lastDir = dir;
-      toc += '<div class="gdir" title="' + h(dir) + '">' + dirLabel(dir) + '</div>';
-    } else if (dir === null && !toc) toc = '<div class="grp">檔案</div>';
-    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '"' + (dir !== null ? ' class="fl">' + fileName(f) : '>' + fileLabel(f)) + '</a>';
+  var max = Math.max.apply(null, [1].concat(files.map(function (f) { return f.additions + f.deletions; })));
+  // one file row (main list) + its sidebar link
+  function fileRow(f) {
     var refs = refsOf(f), g = (G.files || {})[f.path] || {};
     var wrap = document.createElement('div'); wrap.id = 'file-' + f.id;
     var tot = f.additions + f.deletions, w = Math.max(6, Math.round(90 * tot / max)), aw = tot ? Math.round(100 * f.additions / tot) : 0;
@@ -424,9 +409,75 @@ function viewFiles() {
     row.addEventListener('click', function (e) { if (e.target.tagName === 'A') return; openFile(wrap, f); });
     wrap._open = function () { return openFile(wrap, f, true); };
     wrap._f = f; FWRAPS.push(wrap);
-    c.appendChild(wrap);
-  });
+    var tree = FSORT !== 'size';
+    return { node: wrap, toc: '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '"' + (tree ? ' class="fl">' + fileName(f) : '>' + fileLabel(f)) + '</a>' };
+  }
+  // a folder: caret + folder icon + name + file count; its children sit under it, indented. Clicking the header
+  // folds it in both the list and the sidebar (FOLD keeps the state across re-renders)
+  function dirNode(n, key, parent) {
+    var shut = !!FOLD[key], hd = '<span class="cr" aria-hidden="true">▾</span>' + IC_DIR + '<span class="dt">' + h(n.name).replace(/\//g, '/<wbr>') + '</span><span class="cnt">' + n.count + '</span>';
+    var d = document.createElement('div'); d.className = 'tdir' + (shut ? ' shut' : ''); d.dataset.dk = key;
+    d.innerHTML = '<div class="dir" role="button" tabindex="0" title="' + h(n.path) + '">' + hd + '</div><div class="tkids"></div>';
+    var t = '<div class="tdir' + (shut ? ' shut' : '') + '" data-dk="' + h(key) + '"><div class="gdir" role="button" tabindex="0" title="' + h(n.path) + '">' + hd + '</div><div class="tkids">';
+    var kids = d.lastChild;
+    Object.keys(n.dirs).sort().forEach(function (k) { t += dirNode(n.dirs[k], key + '/' + k, kids); });
+    n.files.forEach(function (f) { var r = fileRow(f); kids.appendChild(r.node); t += r.toc; });
+    parent.appendChild(d);
+    return t + '</div></div>';
+  }
+  // folders of `fs` as a tree; a folder holding only one folder and no file merges with it ("src/modules")
+  function tree(fs, prefix, parent) {
+    var root = { name: '', path: '', dirs: {}, files: [], count: 0 };
+    fs.forEach(function (f) {
+      var seg = f.path.split('/'), n = root; n.count++;
+      for (var i = 0; i < seg.length - 1; i++) {
+        n = n.dirs[seg[i]] = n.dirs[seg[i]] || { name: seg[i], path: seg.slice(0, i + 1).join('/'), dirs: {}, files: [], count: 0 };
+        n.count++;
+      }
+      n.files.push(f);
+    });
+    (function squash(n) {
+      Object.keys(n.dirs).forEach(function (k) {
+        var c0 = n.dirs[k], ks;
+        while (!c0.files.length && (ks = Object.keys(c0.dirs)).length === 1) { var c1 = c0.dirs[ks[0]]; c1.name = c0.name + '/' + c1.name; c0 = c1; }
+        delete n.dirs[k]; n.dirs[c0.name] = c0; squash(c0);
+      });
+    })(root);
+    var t = '';
+    root.files.forEach(function (f) { var r = fileRow(f); parent.appendChild(r.node); t += r.toc; }); // repo-root files first, no folder
+    Object.keys(root.dirs).sort().forEach(function (k) { t += dirNode(root.dirs[k], prefix + k, parent); });
+    return t;
+  }
+  if (FSORT === 'size') {
+    toc = '<div class="grp">檔案</div>';
+    list.forEach(function (f) { var r = fileRow(f); c.appendChild(r.node); toc += r.toc; });
+  } else if (FSORT === 'kind') {
+    KINDS.forEach(function (k) {
+      var fs = list.filter(function (f) { return kindOf(f.path) === k; }); if (!fs.length) return;
+      var kh = document.createElement('h3'); kh.className = 'kind'; kh.textContent = k + '（' + fs.length + '）'; c.appendChild(kh);
+      toc += '<div class="grp kind">' + h(k) + '（' + fs.length + '）</div>' + tree(fs, k + ':', c);
+    });
+  } else toc = tree(list, ':', c);
   return { node: c, toc: toc };
+}
+// folded folders, by "<kind>:<folder path>"; kept while the page is open
+var FOLD = {};
+function setFold(key, shut) {
+  if (shut) FOLD[key] = 1; else delete FOLD[key];
+  Array.prototype.forEach.call(document.querySelectorAll('.tdir'), function (d) { if (d.dataset.dk === key) d.classList.toggle('shut', shut); });
+  spySoon();
+}
+function foldClick(e) {
+  var hd = e.target.closest && e.target.closest('.tdir>.dir,.tdir>.gdir'); if (!hd) return;
+  if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  var d = hd.parentNode; setFold(d.dataset.dk, !d.classList.contains('shut'));
+}
+document.addEventListener('click', foldClick);
+document.addEventListener('keydown', foldClick);
+// a jump to a file inside folded folders opens them first
+function unfoldTo(el) {
+  for (var d = el.parentNode; d && d.classList; d = d.parentNode) if (d.classList.contains('tdir') && d.classList.contains('shut')) setFold(d.dataset.dk, false);
 }
 var FWRAPS = [];
 function openFile(wrap, f, keepOpen, lazy) {
@@ -479,6 +530,7 @@ function jumpTo(see) {
 function doJump(fid, line, hid) {
   var wrap = document.getElementById('file-' + fid);
   if (!wrap) { if (showAll()) wrap = document.getElementById('file-' + fid); if (!wrap) return; }
+  unfoldTo(wrap);
   var b = wrap._open(); if (!b) return;
   fillBlock(b, false);
   if (!line) { wrap.scrollIntoView({ block: 'start' }); return; }
@@ -558,7 +610,7 @@ function spy() {
   var tb = document.querySelector('.tabbar'), y = (tb ? tb.offsetHeight : 0) + 24, on = null, best = -Infinity, last = null;
   var atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
   Array.prototype.forEach.call($toc.querySelectorAll('a'), function (a) {
-    var el = tocTarget(a); if (!el) return;
+    var el = tocTarget(a); if (!el || !el.offsetParent || !a.offsetParent) return; // skip folded folders
     var top = el.getBoundingClientRect().top; last = a;
     if (top <= y && top > best) { best = top; on = a; }
   });
