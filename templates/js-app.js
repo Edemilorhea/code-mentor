@@ -134,6 +134,15 @@ var FLABEL = (function () {
   return out;
 })();
 function fileLabel(f) { var l = FLABEL[f.id]; return (l.dir ? '<span class="pd">' + h(l.dir) + '/</span>' : '') + h(l.name); }
+// folder vs file: a folder heading has a folder icon, a dim parent path and its own name in bold;
+// a file under it has a file icon and only its name (the heading already says where it is)
+var IC_DIR = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4l1.5 1.5h7.5v8h-13z"/></svg>';
+var IC_FILE = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z M9.5 1.5v3h3"/></svg>';
+function dirLabel(dir) {
+  var i = dir.lastIndexOf('/');
+  return IC_DIR + '<span class="dt">' + (i >= 0 ? '<span class="pd">' + h(dir.slice(0, i + 1)).replace(/\//g, '/<wbr>') + '</span>' : '') + '<b>' + h(dir.slice(i + 1)) + '</b></span>';
+}
+function fileName(f) { return IC_FILE + '<span class="fn">' + h(f.path.slice(f.path.lastIndexOf('/') + 1)) + '</span>'; }
 function stationCard(u, nums, sc) {
   var s = u.s, d = document.createElement('section'), num = nums ? nums[s.id] : '';
   d.className = 'card'; d.id = (u.mech ? 'm-' : 's-') + s.id;
@@ -399,16 +408,16 @@ function viewFiles() {
     }
     var dir = FSORT === 'size' ? null : dirOf(f.path);
     if (dir !== null && dir !== lastDir) {
-      var dh = document.createElement('div'); dh.className = 'dir'; dh.textContent = dir; c.appendChild(dh); lastDir = dir;
-      toc += '<div class="grp" title="' + h(dir) + '">' + h(dir).replace(/\//g, '/<wbr>') + '</div>';
+      var dh = document.createElement('div'); dh.className = 'dir'; dh.title = dir; dh.innerHTML = dirLabel(dir); c.appendChild(dh); lastDir = dir;
+      toc += '<div class="gdir" title="' + h(dir) + '">' + dirLabel(dir) + '</div>';
     } else if (dir === null && !toc) toc = '<div class="grp">檔案</div>';
-    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '">' + fileLabel(f) + '</a>';
+    toc += '<a href="#files/' + h(f.id) + '" data-file="' + h(f.id) + '" title="' + h(f.path) + '"' + (dir !== null ? ' class="fl">' + fileName(f) : '>' + fileLabel(f)) + '</a>';
     var refs = refsOf(f), g = (G.files || {})[f.path] || {};
     var wrap = document.createElement('div'); wrap.id = 'file-' + f.id;
     var tot = f.additions + f.deletions, w = Math.max(6, Math.round(90 * tot / max)), aw = tot ? Math.round(100 * f.additions / tot) : 0;
     var flags = (f.generated ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (!refs.length && !g.skip ? '<span class="flag">未提及</span>' : '') + (g.skip ? '<span class="flag">略過</span>' : '');
     var row = document.createElement('div'); row.className = 'frow';
-    row.innerHTML = '<span class="nm">' + (FSORT === 'size' ? h(f.path) : fileLabel(f)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
+    row.innerHTML = '<span class="nm">' + (FSORT === 'size' ? h(f.path) : fileName(f)) + '</span><span class="meta">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span><span class="bar" style="width:' + w + 'px"><span style="width:100%"><i class="a" style="width:' + aw + '%"></i><i class="d" style="width:' + (100 - aw) + '%"></i></span></span>' + flags
       + '<span class="refs">' + refs.map(function (u) { return '<a href="#' + (u.mech ? 'mech' : 'scenario') + '" data-jump="' + (u.mech ? 'm-' : 's-') + h(u.s.id) + '">' + h(u.s.title || u.s.id) + '</a>'; }).join('') + '</span>' + (g.summary ? '<span class="meta" style="flex-basis:100%">' + inl(g.summary) + '</span>' : '');
     wrap.appendChild(row);
     var holder = document.createElement('div'); wrap.appendChild(holder);
