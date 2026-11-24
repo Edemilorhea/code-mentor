@@ -157,7 +157,7 @@ function stationCard(u, nums, sc) {
   if (s.chain) t += '<div class="chain"><div class="ct">呼叫鏈</div><pre>' + h(String(s.chain).replace(/\s+$/, '')) + '</pre></div>';
   (s.callouts || []).forEach(function (c) { var k = CK[c.kind] ? c.kind : 'why'; t += '<div class="callout ' + k + '"><div class="ct">' + h(CK[k]) + (c.title ? '・' + h(c.title) : '') + '</div>' + md(c.text) + '</div>'; });
   t += '</div>'; d.innerHTML = t;
-  if (u.mech && s.svg) { var fg = document.createElement('div'); fg.className = 'er'; fg.innerHTML = s.svg; d.appendChild(fg); }
+  if (u.mech && (s.svg || s.diagramFile)) { var fg = document.createElement('div'); fg.innerHTML = (s.svg ? erBox(s.svg) : '') + dfileLink(s); d.appendChild(fg); }
   // in a layer view a station only shows that layer's code; mechanisms always show all of theirs
   var notes = visibleNotes(s.notes);
   (s.hunks || []).forEach(function (ref) {
@@ -188,7 +188,7 @@ function viewMech() {
   var c = document.createDocumentFragment(), toc = '';
   if (G.erSvg) {
     var d = document.createElement('section'); d.className = 'card'; d.id = 'm-er';
-    d.innerHTML = '<div class="prose"><h3>資料表變更（由 migration 推出）</h3></div><div class="er">' + G.erSvg + '</div>' + G.erTables.map(function (t) { return '<div class="prose"><b>' + h(t.name) + '</b> <span class="chip neutral">' + h(t.change) + '</span>' + colTable(t) + '</div>'; }).join('');
+    d.innerHTML = '<div class="prose"><h3>資料表變更（由 migration 推出）</h3></div>' + erBox(G.erSvg) + G.erTables.map(function (t) { return '<div class="prose"><b>' + h(t.name) + '</b> <span class="chip neutral">' + h(t.change) + '</span>' + colTable(t) + '</div>'; }).join('');
     c.appendChild(d); toc += '<a href="#m-er" data-jump="m-er">資料表變更</a>';
   }
   (G.mechanisms || []).forEach(function (m) { c.appendChild(stationCard({ s: m, mech: true })); toc += '<a href="#m-' + h(m.id) + '" data-jump="m-' + h(m.id) + '">' + h(m.title || m.id) + '</a>'; });
@@ -235,12 +235,25 @@ function srcCell(x) {
   if (x.ref) return '<a href="javascript:void 0" data-see="' + h(x.ref) + '" class="src">' + h(x.ref) + '</a>';
   return x.unverified ? '<span class="chip unverified">未驗證</span>' : '';
 }
+// A built-in diagram, shrunk to fit; the 原始大小 button shows it 1:1 with a horizontal scrollbar.
+// The button is removed after render when the diagram already fits (fitErs).
+function erBox(svg) { return '<div class="er"><button type="button" class="rawbtn" data-raw="1" title="切換原始大小（可橫向捲動）／縮小到版面寬">原始大小</button>' + svg + '</div>'; }
+function fitErs() {
+  Array.prototype.forEach.call(document.querySelectorAll('.er'), function (e) {
+    var sv = e.querySelector('svg'), b = e.querySelector('.rawbtn');
+    if (sv && b && +sv.getAttribute('width') <= e.clientWidth) b.remove();
+  });
+}
+// the detailed diagram (drawn with diagram-design, saved under diagrams/)
+function dfileLink(s) {
+  return s.diagramFile && diagLink(s.diagramFile) ? '<p class="dfile"><a href="' + h(s.diagramFile) + '" target="_blank" rel="noopener">開啟完整圖 ↗</a></p>' : '';
+}
 function viewSpine() {
   var c = document.createDocumentFragment(), toc = '';
   (G.spines || []).forEach(function (s, i) {
     var d = document.createElement('section'); d.className = 'card spine'; d.id = 'p-' + s.id;
     var t = '<div class="prose"><h3><span class="num">' + (i + 1) + '</span>' + h(s.title || s.id) + '</h3>' + (s.text ? md(s.text) : '');
-    if (s.svg) t += '<div class="ct">流程圖</div><div class="er">' + s.svg + '</div>';
+    if (s.svg || s.diagramFile) t += '<div class="ct">流程圖</div>' + (s.svg ? erBox(s.svg) : '') + dfileLink(s);
     var steps = s.steps || [];
     if (steps.length) {
       t += '<div class="ct">步驟</div><table class="sp-t"><thead><tr><th>#</th><th>檔案</th><th>做什麼</th><th>寫入</th><th>出處</th></tr></thead><tbody>'
@@ -605,7 +618,7 @@ function render() {
     BLOCKS.length = 0; if (lgOff) lgOff(); closePeek();
     var v = tab === 'overview' ? viewOverview() : tab === 'spine' ? viewSpine() : tab === 'files' ? viewFiles() : tab === 'mech' ? viewMech() : tab === 'logic' ? viewLogic() : viewScenario();
     var ct = document.getElementById('content'); ct.innerHTML = ''; ct.appendChild(v.node);
-    $toc.innerHTML = v.toc; cur = tab; spyOn = null;
+    $toc.innerHTML = v.toc; cur = tab; spyOn = null; fitErs();
     Array.prototype.forEach.call(document.querySelectorAll('.tabs a'), function (a) { a.classList.toggle('on', a.dataset.t === tab); });
     var fs = document.getElementById('fsort'); if (fs) { fs.value = FSORT; fs.onchange = function () { FSORT = fs.value; lsSet('dg.fsort', FSORT); cur = null; render(); }; }
   }
@@ -639,8 +652,9 @@ function toggleAll(open) {
   });
 }
 document.addEventListener('click', function (e) {
-  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-gosp],[data-all],[data-peek]') : null; if (!t) return;
-  if (t.dataset.peek) peekFile(t.dataset.peek);
+  var t = e.target.closest ? e.target.closest('[data-see],[data-jump],[data-goto],[data-gosp],[data-all],[data-peek],[data-raw]') : null; if (!t) return;
+  if (t.dataset.raw) { var er = t.parentNode, raw = er.classList.toggle('raw'); t.textContent = raw ? '縮小顯示' : '原始大小'; }
+  else if (t.dataset.peek) peekFile(t.dataset.peek);
   else if (t.dataset.gosp) { e.preventDefault(); var pid = t.dataset.gosp; if (cur !== 'spine') location.hash = '#spine'; setTimeout(function () { var el = document.getElementById(pid); if (el) el.scrollIntoView(); }, 0); }
   else if (t.dataset.all) { setPanel(false); toggleAll(t.dataset.all === 'open'); }
   else if (t.dataset.see) { e.preventDefault(); jumpTo(t.dataset.see); }

@@ -59,7 +59,7 @@ code-mentor 只負責 diff 的收集、渲染與覆蓋檢查。講解內容由�
 
 ### D：圖
 
-- 有 `diagram-design`：只在使用者要求「架構圖」「sequence 圖」或一站的機制用文字講不清楚時，才用它畫圖。把畫好的單檔 HTML 存在工作資料夾的 `diagrams/`（和 `index.html` 同一層），在該站的 callout 裡寫相對路徑連結。不要把它的 HTML 貼進 `guide.json`。
+- 有 `diagram-design`：只在使用者要求「架構圖」「sequence 圖」或一站的機制用文字講不清楚時，才用它畫圖。用 `diagram-design` 畫的圖存在工作資料夾的 `diagrams/`（和 `index.html` 同一層）。主線與機制用 `diagramFile` 指向它；站內用 `[說明](diagrams/xxx.html)` 連到它。報告內建的 `diagram` 只當簡圖，用來讓讀者一眼看出順序。不要把它的 HTML 貼進 `guide.json`。
 - 沒有 `diagram-design`：用 `guide.json` 的 `mechanisms[].diagram`（flow／state）。migration 的資料表圖由工具自動產生，不必另畫。
 
 ### 不論哪條路徑都不能違反
@@ -330,6 +330,12 @@ Callout 是整站層級的說明，不貼在某一行上。`what`／`how`／`syn
 - 固定四段：`diagram`（每個節點標模組與檔案）、`steps`（每步連到站）、`example`（同一個具體例子的每張表那一列，標出串接的值）、`failure`（哪一步失敗、留下什麼、怎麼補救）。最後一題 `recall`。
 - **出處規則**：步驟、範例列、失敗路徑的每一項都要有 `ref` 指到程式行。diff 看不到的事（另一個模組的交易會不會回滾、某張表的其他欄位）不要推論成事實，標 `unverified: true`。寧可標未驗證，也不要寫得像確定。
 - 主線講過整條鏈的站，`chain` 可以縮成「本站是主線 p1 第 N 步」，不要重寫一次。
+- **簡圖規則**（`diagram`）：
+  - 節點 label 只寫「模組＋動作」，例如「② Customer 開帳號」，不超過 12 個字。
+  - 邊 label 只寫編號，或留空。
+  - Handler 名稱、檔案 id、寫入的表放在 `steps`，不放進圖。
+  - 節點超過 6 個，或圖裡有分支或失敗路徑時，另外用 `diagram-design` 畫 sequence 圖，存到 `diagrams/`，填進 `diagramFile`。
+  - `check` 在節點 label 超過 24 字、邊 label 超過 12 字、或一個節點連出超過 3 條都有 label 的邊時警告。
 
 ### 邏輯導讀（`logic`）
 

@@ -11,7 +11,8 @@
   "features": [{ "title": "申請帳號", "what": "申請人填表送出，拿到臨時密碼", "why": "醫院不用再人工開帳號", "status": "done|unverified|gap", "spine": "p1", "stations": ["s3"] }],
   "spines": [{
     "id": "p1", "title": "送出申請：從按鈕到資料表", "text": "（選填）一兩句開場",
-    "diagram": { "type": "flow", "nodes": [{ "id": "a", "label": "前端 ApplyForm", "kind": "focal" }], "edges": [] },
+    "diagram": { "type": "flow", "nodes": [{ "id": "a", "label": "① 前端送出", "kind": "focal" }], "edges": [] },
+    "diagramFile": "（選填）diagrams/p1-apply.html",
     "steps": [{ "file": "f12", "module": "前端", "does": "按送出，POST /api/apply", "writes": "", "station": "s3", "ref": "f12#2:40" },
               { "file": "f20", "module": "Account", "does": "建帳號", "writes": "Account（新增一列）", "station": "s3", "ref": "f20#1:55" }],
     "exampleCase": "以王小明（A123456789）申請為例",
@@ -73,7 +74,8 @@
 - `noSpine`：`教學` 等級程式有 `SaveChanges` 卻沒有 `spines` 時 `check` 報**錯誤**；寫入不是使用者操作（seed、腳本）時，填這個欄位說明原因。
 - `hunks`：可填檔案 id（整檔）、路徑，或 hunk id（`f13#2`）。
 - `parent`：設為某主站 id 時，這站是子站，顯示成 `3-a`、`3-b`。
-- 文字欄位支援 markdown-lite：`` `code` ``、`**粗體**`、空行分段、`- ` 清單。工具會跳脫 HTML。
+- 文字欄位支援 markdown-lite：`` `code` ``、`**粗體**`、空行分段、`- ` 清單、`[文字](diagrams/…)` 連結（開新分頁）。工具會跳脫 HTML。連結只接受 `diagrams/` 開頭的相對路徑，其他寫法（`http:`、`../`、絕對路徑）照原文顯示；連到的檔案不存在時 `check` 報錯。
+- `spines[].diagramFile`、`mechanisms[].diagramFile`（選填）：用 `diagram-design` 畫的細節圖，例如 `"diagrams/p1-confirm.html"`。報告在簡圖下方加「開啟完整圖」連結；有 `diagramFile` 時可以不寫 `diagram`。路徑規則同上。
 - 註解 `note`
   - `line` 是該 hunk 內的行號。`side` 預設 `new`；`side: "old"` 用舊檔行號。
   - `to`（選填）：結束行（同一側）。形成**範圍註解**：範圍左側有色條，說明框放在範圍第一行上方，標題 `L47–L62`。

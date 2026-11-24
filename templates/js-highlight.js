@@ -2,7 +2,14 @@
 var DATA = JSON.parse(document.getElementById('data').textContent), D = DATA.diff, G = DATA.guide;
 var ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function h(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ESC[c]; }); }
-function inl(s) { return h(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
+// [text](diagrams/…) becomes a link; any other target (http:, javascript:, ../, absolute) stays plain text.
+// Runs on escaped text, so the path can hold no quote or <; `..` segments are rejected.
+var LINK_RE = /\[([^\]]+)\]\((diagrams\/[^)\s]+)\)/g;
+function diagLink(p) { return /^diagrams\/[^:\\]+$/.test(p) && !/(^|\/)\.\.(\/|$)/.test(p); }
+function inl(s) {
+  return h(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(LINK_RE, function (m, t, p) { return diagLink(p) ? '<a href="' + p + '" target="_blank" rel="noopener">' + t + '</a>' : m; });
+}
 function md(t) {
   if (!t) return '';
   var out = [];

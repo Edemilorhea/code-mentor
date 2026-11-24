@@ -271,8 +271,14 @@ h3.kind{font-size:var(--fs-lg);margin:36px 0 4px;padding-bottom:6px;border-botto
 .add{color:var(--new)}.del{color:var(--risk)}
 .maprow{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:var(--fs-sm)}
 .maprow .lk{font:500 calc(12.5px*var(--ui)) var(--font-mono)}
-.er{overflow-x:auto;margin:12px 0}
-.er svg,svg.diagram{max-width:none;height:auto;display:block}
+/* a wide diagram shrinks to fit so the reader sees it whole; .er.raw (原始大小) shows it 1:1 and scrolls */
+.er{margin:12px 0}
+.er svg,svg.diagram{max-width:100%;height:auto;display:block}
+.er.raw{overflow-x:auto}
+.er.raw svg{max-width:none}
+.er .rawbtn{display:block;margin:0 0 6px auto;position:sticky;left:100%;font:500 var(--fs-xs)/1 var(--font-sans);padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--muted);cursor:pointer}
+.er .rawbtn:hover{color:var(--fg);border-color:var(--line-strong)}
+.dfile{margin:4px 0 8px;font-size:var(--fs-sm)}
 /* 主線 (spine): steps / example rows / failure paths as tables */
 .spine .ct{font:600 var(--fs-xs)/1.3 var(--font-sans);color:var(--muted);margin:18px 0 6px;letter-spacing:.04em}
 table.sp-t{width:100%;border-collapse:collapse;font-size:calc(14px*var(--ui));margin:4px 0 8px}
