@@ -102,8 +102,10 @@ b,strong{font-weight:600;color:var(--fg)}
 :root:not(.text-fill) .dg-main{width:100%;max-width:1240px;margin-inline:auto}
 .dg-tb{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);padding:6px 8px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.35);font:500 calc(12.5px*var(--ui))/1 var(--font-sans)}
 .dg-tb[hidden]{display:none}.dg-main{padding-bottom:88px}
-/* sidebar open: center the toolbar over the main column so it never covers the sidebar's bottom controls (.dg-set) */
-@media(min-width:1160px){:root:not(.toc-off) .dg-tb{left:calc(50% + (var(--toc-w) + var(--gutter)) / 2);max-width:calc(100vw - var(--toc-w) - var(--gutter) - 24px)}}
+/* half-round tab on the toolbar's left end: hides the toolbar; the sidebar-corner button (.dg-set [data-ui=tbshow]) brings it back */
+.dg-tb button.hd{width:22px;min-width:22px;padding:0 0 0 4px;margin-left:-4px;border-radius:999px 4px 4px 999px;color:var(--muted)}
+.dg-tb .hd svg,.dg-set [data-ui=tbshow] svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dg-set [data-ui=tbshow][hidden]{display:none}
 .dg-tb .nm{font:500 calc(12.5px*var(--ui))/1 var(--font-mono);color:var(--fg);white-space:nowrap;padding:0 8px}
 .dg-tb .sep{width:1px;height:18px;background:var(--line-strong);margin:0 4px}
 .dg-tb button{appearance:none;font:inherit;height:28px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:var(--fg);cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -196,7 +198,10 @@ button.rt{cursor:pointer}button.rt:hover{background:color-mix(in srgb,var(--c) 2
 .dg-peek .ph .nm{flex:1;min-width:0;overflow-wrap:anywhere}
 .dg-peek .px{appearance:none;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);border-radius:6px;width:30px;height:28px;cursor:pointer}
 .dg-peek .px:hover{background:var(--sunken)}
+/* room to scroll the last lines above the floating toolbar (.dg-tb). A spacer, not padding-bottom:
+   padding would also lift the sticky long-line scrollbar (.sxb, bottom is measured inside the padding) */
 .dg-peek .pc{flex:1;overflow:auto;padding:12px}
+.dg-peek .pc::after{content:"";display:block;height:72px}
 .dg-peek .blk{width:100%;min-width:0}
 .dg-peek .blk>.rz,.dg-peek .pk,.dg-peek .tg{display:none}
 @media(max-width:1100px){.dg-peek{width:100vw}}
@@ -211,6 +216,7 @@ table.df .sx{display:inline-block;vertical-align:top}
 .blk:not(.wrapall) td.code:not(.wrap)>.sx,.blk:not(.wrapall) td.m[data-o]:not(.wrap)>.sx{transform:translateX(var(--sxl,0px))}
 .blk:not(.wrapall) td.m[data-n]:not(.wrap)>.sx{transform:translateX(var(--sxr,0px))}
 .sxb{position:sticky;bottom:60px;height:14px;z-index:3;pointer-events:none}
+.tb-off .sxb{bottom:12px}
 .sxb>div{position:absolute;top:0;height:14px;overflow-x:auto;overflow-y:hidden;pointer-events:auto;scrollbar-width:thin;background:color-mix(in srgb,var(--code-bg) 80%,transparent)}
 .sxb i{display:block;height:1px}
 table.df td.w,table.df td.wrap,.blk.wrapall table.df tr:not(.gap)>td:not(.nt){white-space:pre-wrap;overflow-wrap:anywhere}

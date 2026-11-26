@@ -548,7 +548,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     raf = 0;
     var b = pick();
     if (b !== cur) { if (cur) cur.classList.remove('cur'); cur = b; if (cur) cur.classList.add('cur'); }
-    tb.hidden = !cur; if (!cur) return;
+    tb.hidden = !cur || OFF; if (!cur || OFF) return;
     var f = byId[cur.dataset.file], open = cur.dataset.open === '1', C = VIEW.tb === 'compact' || fitC;
     tb.classList.toggle('compact', C);
     // the whole file name, plus the folders that tell same-named files apart (FLABEL, js-app.js)
@@ -573,10 +573,36 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     q('[data-tb=c20]').disabled = !un;
     q('[data-tb=call]').disabled = !(un || Object.keys(cur._unfold || {}).length);
     q('[data-tb=fsv]').textContent = fsOf(cur) + 'px';
+    place();
     // full-text labels that do not fit (narrow window, sidebar open) fall back to icons for this pass
     if (!C && tb.scrollWidth > tb.clientWidth + 1) { fitC = true; update(); fitC = false; }
   }
   var fitC = false;
+  // Hidden toolbar (half-round tab on its left, or t): a sidebar-corner button brings it back. Remembered per browser.
+  // tb-off on <html> lowers the long-line scrollbars (.sxb) that otherwise sit above the toolbar.
+  var OFF = lsGet('dg.tboff', '') === '1', show = document.querySelector('[data-ui=tbshow]');
+  function setOff(v) {
+    OFF = v; lsSet('dg.tboff', v ? '1' : '');
+    document.documentElement.classList.toggle('tb-off', v);
+    if (show) show.hidden = !v;
+    update();
+  }
+  document.documentElement.classList.toggle('tb-off', OFF); if (show) show.hidden = !OFF;
+  if (show) show.addEventListener('click', function () { setOff(false); });
+  // Center the toolbar over the pane that holds the current block: the side window, or the main column
+  // between the sidebar and the side window. So it never straddles both panes or covers the sidebar.
+  function place() {
+    var pk = cur.closest('.dg-peek'), L, R;
+    if (pk) { var r = pk.getBoundingClientRect(); L = r.left; R = r.right; }
+    else {
+      var toc = document.querySelector('.dg-toc'), tr = toc && toc.offsetParent ? toc.getBoundingClientRect() : null;
+      var op = document.querySelector('.dg-peek:not([hidden])');
+      L = tr && tr.width && getComputedStyle(toc).position === 'sticky' ? tr.right : 0;
+      R = op ? op.getBoundingClientRect().left : document.documentElement.clientWidth;
+    }
+    tb.style.left = Math.round((L + R) / 2) + 'px';
+    tb.style.maxWidth = Math.max(200, Math.round(R - L - 24)) + 'px';
+  }
   function setFs(v) {
     var id = cur.dataset.file;
     if (v === CODEFS) delete FS[id]; else FS[id] = v;
@@ -588,6 +614,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
   tb.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tb]'); if (!t || !cur) return;
     var a = t.dataset.tb;
+    if (a === 'hide') return setOff(true);
     if (a === 'open') cur.toggle();
     else if (a === 'peek') { if (cur.closest('.dg-peek')) closePeek(); else peekFile(cur.dataset.file); }
     else if (a === 'mode') cur.querySelector('.tg').click();
@@ -614,6 +641,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     var t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (e.key === 't') { e.preventDefault(); setOff(!OFF); return; }
     var sc = SCROLL[e.key];
     if (sc) {
       var box = cur && cur.closest('.dg-peek .pc'), vh = box ? box.clientHeight : window.innerHeight;
