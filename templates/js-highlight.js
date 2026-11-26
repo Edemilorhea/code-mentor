@@ -14,9 +14,14 @@ function md(t) {
   if (!t) return '';
   var out = [];
   String(t).split(/\n\s*\n/).forEach(function (p) {
-    var ls = p.split('\n');
-    if (ls.every(function (l) { return /^\s*- /.test(l); })) out.push('<ul>' + ls.map(function (l) { return '<li>' + inl(l.replace(/^\s*- /, '')) + '</li>'; }).join('') + '</ul>');
-    else out.push('<p>' + ls.map(inl).join('<br>') + '</p>');
+    // a paragraph may mix text lines and "- " list lines (e.g. "intro：" then items, no blank line between)
+    var txt = [], li = [];
+    var flushT = function () { if (txt.length) out.push('<p>' + txt.map(inl).join('<br>') + '</p>'); txt = []; };
+    var flushL = function () { if (li.length) out.push('<ul>' + li.map(function (l) { return '<li>' + inl(l) + '</li>'; }).join('') + '</ul>'); li = []; };
+    p.split('\n').forEach(function (l) {
+      if (/^\s*- /.test(l)) { flushT(); li.push(l.replace(/^\s*- /, '')); } else { flushL(); txt.push(l); }
+    });
+    flushT(); flushL();
   });
   return '<div class="md">' + out.join('') + '</div>';
 }

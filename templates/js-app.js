@@ -153,7 +153,11 @@ function stationCard(u, nums, sc) {
   var t = '<div class="prose"><h3>' + (num ? '<span class="num">' + h(num) + '</span>' : '') + (s.change ? '<span class="tag ' + h(s.change) + '">' + h(s.change) + '</span>' : '') + h(s.title || s.id) + (st ? '<span class="chip ' + st[0] + '">' + st[1] + '</span>' : '') + '</h3>';
   if (s.intuition) t += '<div class="intuition"><div class="ct">直覺</div>' + md(s.intuition) + '</div>';
   if (u.mech) { if (s.problem) t += '<div class="three"><div><b>問題</b> <span class="v">' + inl(s.problem) + '</span></div></div>'; if (s.text) t += md(s.text); }
-  else t += '<div class="three">' + (s.situation ? '<div><b>情境</b> <span class="v">' + inl(s.situation) + '</span></div>' : '') + (s.purpose ? '<div><b>為了完成</b> <span class="v">' + inl(s.purpose) + '</span></div>' : '') + (s.did ? '<div><b>我做了</b> <span class="v">' + inl(s.did) + '</span></div>' : '') + '</div>';
+  else {
+    // one line stays inline next to its label; multi-line text (lists, paragraphs) renders as markdown-lite
+    var v3 = function (x) { return /\n/.test(x) ? '<div class="v">' + md(x) + '</div>' : '<span class="v">' + inl(x) + '</span>'; };
+    t += '<div class="three">' + (s.situation ? '<div><b>情境</b> ' + v3(s.situation) + '</div>' : '') + (s.purpose ? '<div><b>為了完成</b> ' + v3(s.purpose) + '</div>' : '') + (s.did ? '<div><b>我做了</b> ' + v3(s.did) + '</div>' : '') + '</div>';
+  }
   if (s.chain) t += '<div class="chain"><div class="ct">呼叫鏈</div><pre>' + h(String(s.chain).replace(/\s+$/, '')) + '</pre></div>';
   (s.callouts || []).forEach(function (c) { var k = CK[c.kind] ? c.kind : 'why'; t += '<div class="callout ' + k + '"><div class="ct">' + h(CK[k]) + (c.title ? '・' + h(c.title) : '') + '</div>' + md(c.text) + '</div>'; });
   t += '</div>'; d.innerHTML = t;

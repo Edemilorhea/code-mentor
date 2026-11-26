@@ -360,6 +360,8 @@ function mkBlock(ref, notes, opts) {
   var tags = (f.generated && roleOf(f) !== '產生檔' ? '<span class="flag">產生檔</span>' : '') + (f.large ? '<span class="flag">大修改</span>' : '') + (f._fmt && f._fmt === f.additions + f.deletions ? '<span class="flag">僅格式化</span>' : '');
   d.innerHTML = '<div class="fh">' + roleTag(f) + '<span class="p">' + h(f.path) + (r.hunk ? ' <span class="st">' + h(r.hunk.id) + '</span>' : '') + '</span><span class="st">' + h(f.status) + '</span><span class="add">+' + f.additions + '</span><span class="del">−' + f.deletions + '</span>' + tags
     + '<span class="sp"></span><a href="#files/' + f.id + '" data-nohead="1">依檔案檢視</a><button type="button" class="pk" data-peek="' + h(f.id) + '" title="在右側視窗看整個檔案與全部說明（核心＋細部），不離開目前頁面">側窗</button><button type="button" class="tg"></button><button type="button" class="fv"></button><button type="button" class="fd">' + (open ? '收合' : '展開') + '</button></div>'
+    // what the file is and what it is for: whole-file views only (side window, files tab), not every station snippet
+    + (opts && opts.forceOpen && g.purpose ? '<div class="fpur"><b>這個檔案：</b>' + inl(g.purpose) + '</div>' : '')
     + (f.generated && (g.explain || g.summary) ? '<div class="explain">' + (g.summary ? '<b>' + inl(g.summary) + '</b>' : '') + md(g.explain) + '</div>' : '')
     + '<div class="bd" style="position:relative"></div><div class="rz" title="拖曳調整所有 diff 寬度，雙擊還原"></div>';
   var fh = d.querySelector('.fh'), bd = d.querySelector('.bd'), fd = d.querySelector('.fd'), tg = d.querySelector('.tg');
@@ -547,7 +549,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     var b = pick();
     if (b !== cur) { if (cur) cur.classList.remove('cur'); cur = b; if (cur) cur.classList.add('cur'); }
     tb.hidden = !cur; if (!cur) return;
-    var f = byId[cur.dataset.file], open = cur.dataset.open === '1', C = VIEW.tb === 'compact';
+    var f = byId[cur.dataset.file], open = cur.dataset.open === '1', C = VIEW.tb === 'compact' || fitC;
     tb.classList.toggle('compact', C);
     // the whole file name, plus the folders that tell same-named files apart (FLABEL, js-app.js)
     var fl = typeof FLABEL !== 'undefined' && FLABEL[f.id];
@@ -571,7 +573,10 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     q('[data-tb=c20]').disabled = !un;
     q('[data-tb=call]').disabled = !(un || Object.keys(cur._unfold || {}).length);
     q('[data-tb=fsv]').textContent = fsOf(cur) + 'px';
+    // full-text labels that do not fit (narrow window, sidebar open) fall back to icons for this pass
+    if (!C && tb.scrollWidth > tb.clientWidth + 1) { fitC = true; update(); fitC = false; }
   }
+  var fitC = false;
   function setFs(v) {
     var id = cur.dataset.file;
     if (v === CODEFS) delete FS[id]; else FS[id] = v;
@@ -597,15 +602,27 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
   });
   // Single-key shortcuts for the toolbar (GitHub style: no modifier, ignored while typing).
   // Each one clicks its toolbar button, so a disabled button stays a no-op and the toolbar's own logic is reused.
-  var KEYS = { o: 'open', p: 'peek', s: 'mode', a: 'full', w: 'wrap', k: 'u20', K: 'uall', j: 'd20', J: 'dall', c: 'c20', C: 'call', '-': 'fs-', '=': 'fs+', '+': 'fs+', '0': 'fsv' };
+  var KEYS = { o: 'open', p: 'peek', s: 'mode', a: 'full', w: 'wrap', u: 'u20', U: 'uall', d: 'd20', D: 'dall', c: 'c20', C: 'call', '-': 'fs-', '=': 'fs+', '+': 'fs+', '0': 'fsv' };
+  // Scrolling keys (work with or without the toolbar): j/k one small step, h/l one page (h = PgDn, l = PgUp).
+  // They scroll the side window when the current block is in it, else the page.
+  var SCROLL = { j: 1, k: -1, h: 2, l: -2 };
   var KEYOF = {};
   Object.keys(KEYS).forEach(function (k) { if (!KEYOF[KEYS[k]]) KEYOF[KEYS[k]] = /^[A-Z]$/.test(k) ? 'Shift+' + k : k; });
   function keyTip(a) { return KEYOF[a] ? '（快捷鍵 ' + KEYOF[a] + '）' : ''; }
   ['fs-', 'fsv', 'fs+'].forEach(function (a) { var el = q('[data-tb="' + a + '"]'); if (el) el.title += keyTip(a); });
   document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !cur || tb.hidden) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     var t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    var sc = SCROLL[e.key];
+    if (sc) {
+      var box = cur && cur.closest('.dg-peek .pc'), vh = box ? box.clientHeight : window.innerHeight;
+      var dy = Math.abs(sc) === 1 ? sc * 80 : (sc > 0 ? 1 : -1) * Math.round(vh * 0.9);
+      e.preventDefault();
+      if (box) box.scrollTop += dy; else window.scrollBy(0, dy);
+      return;
+    }
+    if (!cur || tb.hidden) return;
     var a = KEYS[e.key]; if (!a) return;
     var btn = q('[data-tb="' + a + '"]'); if (!btn || btn.disabled) return;
     e.preventDefault();

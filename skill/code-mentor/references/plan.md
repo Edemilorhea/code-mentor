@@ -28,7 +28,7 @@
     "path/to/file": {
       "kind": "前端|後端|資料模型|其他",
       "role": "測試|產生檔|前端元件|前端 Model|前端 Service|API 入口|後端 Command／Query|後端 Model|後端 Service|DB 設定|設定／資料|其他",
-      "summary": "", "skip": "略過原因", "skipHunks": ["f3#4"]
+      "summary": "", "purpose": "這個檔案是什麼、為了什麼存在（寫法在 station.md）", "skip": "略過原因", "skipHunks": ["f3#4"]
     }
   }
 }
