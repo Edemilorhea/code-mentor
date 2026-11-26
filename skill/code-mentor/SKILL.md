@@ -1,6 +1,7 @@
 ---
 name: code-mentor
 description: 把本機 git 分支／修改／MR 的 diff 做成情境導向的 code 導讀報告檔（離線 HTML 加 Markdown，像 GitLab diff 一樣逐段講解，整個 diff 的每個檔案都講到）。有三個深度：概覽、導讀（預設）、教學。當使用者說「導讀這個分支」「導讀這次修改」「導讀這個 MR」「概覽這個分支」「產生 code 導讀 HTML／Markdown」「像 GitLab diff 一樣講解」「看懂 migration／產生檔的修改」，或用 `/code-mentor`（含 `--help`）時使用。不用於：只想在對話裡知道改了什麼、不要報告檔（用 change-understanding-review）；想被一站一站帶著讀（用 implementation-understanding-tutor）。
+allowed-tools: Bash(code-mentor *)
 ---
 
 # code-mentor：情境導向的 code 導讀

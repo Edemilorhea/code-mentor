@@ -553,7 +553,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     var fl = typeof FLABEL !== 'undefined' && FLABEL[f.id];
     q('.nm').textContent = fl ? (fl.dir ? fl.dir + '/' : '') + fl.name : f.path; q('.nm').title = f.path;
     // full text, or a symbol in compact mode; the tooltip always carries the full meaning
-    var lab = function (a, full, short) { var el = q('[data-tb=' + a + ']'); if (el.dataset.tip == null) el.dataset.tip = el.title || ''; el.textContent = C ? short : full; el.title = el.dataset.tip || full; };
+    var lab = function (a, full, short) { var el = q('[data-tb=' + a + ']'); if (el.dataset.tip == null) el.dataset.tip = el.title || ''; el.textContent = C ? short : full; el.title = (el.dataset.tip || full) + keyTip(a); };
     lab('open', open ? '收合檔案' : '展開檔案', open ? '▾' : '▸');
     var inPeek = !!cur.closest('.dg-peek');
     lab('peek', inPeek ? '關閉側窗' : '開側窗', inPeek ? '✕' : '⧉');
@@ -594,6 +594,22 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     else if (a === 'd20' || a === 'dall') return expand(1, a === 'dall');
     else if (a === 'c20' || a === 'call') return collapse(a === 'call');
     update();
+  });
+  // Single-key shortcuts for the toolbar (GitHub style: no modifier, ignored while typing).
+  // Each one clicks its toolbar button, so a disabled button stays a no-op and the toolbar's own logic is reused.
+  var KEYS = { o: 'open', p: 'peek', s: 'mode', a: 'full', w: 'wrap', k: 'u20', K: 'uall', j: 'd20', J: 'dall', c: 'c20', C: 'call', '-': 'fs-', '=': 'fs+', '+': 'fs+', '0': 'fsv' };
+  var KEYOF = {};
+  Object.keys(KEYS).forEach(function (k) { if (!KEYOF[KEYS[k]]) KEYOF[KEYS[k]] = /^[A-Z]$/.test(k) ? 'Shift+' + k : k; });
+  function keyTip(a) { return KEYOF[a] ? '（快捷鍵 ' + KEYOF[a] + '）' : ''; }
+  ['fs-', 'fsv', 'fs+'].forEach(function (a) { var el = q('[data-tb="' + a + '"]'); if (el) el.title += keyTip(a); });
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !cur || tb.hidden) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    var a = KEYS[e.key]; if (!a) return;
+    var btn = q('[data-tb="' + a + '"]'); if (!btn || btn.disabled) return;
+    e.preventDefault();
+    btn.click();
   });
   // capture: also the side window's own scroll area
   document.addEventListener('scroll', later, { passive: true, capture: true });
