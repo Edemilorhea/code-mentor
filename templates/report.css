@@ -219,6 +219,10 @@ table.df .sx{display:inline-block;vertical-align:top}
 .tb-off .sxb{bottom:12px}
 .sxb>div{position:absolute;top:0;height:14px;overflow-x:auto;overflow-y:hidden;pointer-events:auto;scrollbar-width:thin;background:color-mix(in srgb,var(--code-bg) 80%,transparent)}
 .sxb i{display:block;height:1px}
+/* quiet until needed: a faint line hints that long lines continue to the right; hovering the code (or the bar, or dragging it)
+   brings back the full scrollbar. Touch screens have no hover, so they always get the full bar */
+@media(hover:hover){.sxb>div{opacity:.3;background:transparent;transition:opacity .15s,background-color .15s}
+.blk:hover .sxb>div,.sxb>div:hover,.sxb>div:active,.sxb>div:focus{opacity:1;background:color-mix(in srgb,var(--code-bg) 80%,transparent)}}
 table.df td.w,table.df td.wrap,.blk.wrapall table.df tr:not(.gap)>td:not(.nt){white-space:pre-wrap;overflow-wrap:anywhere}
 table.df td.no{width:52px;text-align:right;color:var(--faint);user-select:none;border-right:1px solid var(--line);padding:0 8px}
 table.df td.sg{width:20px;text-align:center;color:var(--faint);user-select:none;padding:0}

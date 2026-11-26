@@ -548,7 +548,8 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
     raf = 0;
     var b = pick();
     if (b !== cur) { if (cur) cur.classList.remove('cur'); cur = b; if (cur) cur.classList.add('cur'); }
-    tb.hidden = !cur || OFF; if (!cur || OFF) return;
+    // a hidden toolbar still tracks the current block and its button states, so the shortcuts keep working
+    tb.hidden = !cur || OFF; if (!cur) return;
     var f = byId[cur.dataset.file], open = cur.dataset.open === '1', C = VIEW.tb === 'compact' || fitC;
     tb.classList.toggle('compact', C);
     // the whole file name, plus the folders that tell same-named files apart (FLABEL, js-app.js)
@@ -650,7 +651,7 @@ document.addEventListener('change', function (e) { if (e.target && e.target.id =
       if (box) box.scrollTop += dy; else window.scrollBy(0, dy);
       return;
     }
-    if (!cur || tb.hidden) return;
+    if (!cur) return;
     var a = KEYS[e.key]; if (!a) return;
     var btn = q('[data-tb="' + a + '"]'); if (!btn || btn.disabled) return;
     e.preventDefault();
