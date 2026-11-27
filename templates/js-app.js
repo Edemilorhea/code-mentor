@@ -53,7 +53,8 @@ function mappingHtml(f) {
 function head() {
   var adds = 0, dels = 0; files.forEach(function (f) { adds += f.additions; dels += f.deletions; });
   var mr = SRC.mr, what = SRC.mode === 'mr' ? 'MR !' + mr.iid : SRC.mode === 'range' ? D.target : D.target;
-  var s = '<header class="top prose"><div class="eyebrow">Code 導讀</div><h1>' + h(G.title || (mr && mr.title) || 'Code 導讀') + '</h1>';
+  var depth = G.depth || '導讀', dinfo = (G.depthInfo || {})[depth] || '';
+  var s = '<header class="top prose"><div class="eyebrow">Code Mentor</div><h1>' + h(G.title || (mr && mr.title) || 'Code Mentor') + '</h1>';
   s += '<div class="meta">基準 <code>' + h(D.base) + '</code>（merge-base <code>' + h(D.baseline) + '</code>）→ ' + h(what) + '　分支 <code>' + h(D.branch) + '</code>　' + h(D.date) + (D.uncommitted ? '　含未 commit 變更' : '') + '</div>';
   if (mr) s += '<div class="meta">' + (mr.url ? '<a href="' + h(mr.url) + '">' + h(mr.title || ('!' + mr.iid)) + '</a>' : h(mr.title || '')) + (mr.author ? '　作者 ' + h(mr.author) : '') + (mr.target ? '　目標 <code>' + h(mr.target) + '</code>' : '') + '</div>';
   if (mr && mr.description) s += '<details class="commits"><summary>MR 說明</summary>' + md(mr.description) + '</details>';
@@ -61,7 +62,7 @@ function head() {
   s += '<div class="keyline"><span><b>' + files.length + '</b> 個檔案</span><span class="add">+' + adds + '</span><span class="del">−' + dels + '</span>' + (G.intent ? '<span>意圖：' + h(G.intent) + '</span>' : '') + ((D.ignored || []).length ? '<span title="' + h(D.ignored.join('\n')) + '">已排除 ' + D.ignored.length + ' 個 .gitignore 檔案</span>' : '') + '</div>';
   if ((D.commits || []).length) s += '<details class="commits"><summary>' + D.commits.length + ' 個 commit</summary><ul>' + D.commits.map(function (c) { return '<li><code>' + h(c.hash) + '</code> ' + h(c.subject) + '</li>'; }).join('') + '</ul></details>';
   s += '</header>';
-  s += '<div class="tabbar"><nav class="tabs">' + (HAS_OV ? '<a href="#overview" data-t="overview">功能總覽</a>' : '') + (HAS_SP ? '<a href="#spine" data-t="spine">主線</a>' : '') + '<a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav></div><div class="content" id="content"></div>';
+  s += '<div class="tabbar"><nav class="tabs">' + (HAS_OV ? '<a href="#overview" data-t="overview">功能總覽</a>' : '') + (HAS_SP ? '<a href="#spine" data-t="spine">主線</a>' : '') + '<a href="#scenario" data-t="scenario">依情境</a><a href="#files" data-t="files">依檔案</a><a href="#mech" data-t="mech">機制／架構</a>' + ((G.logic || []).length ? '<a href="#logic" data-t="logic">邏輯導讀</a>' : '') + '</nav><span class="depth-badge" data-depth="' + h(depth) + '" title="' + h(dinfo) + '">' + h(depth) + '</span></div><div class="content" id="content"></div>';
   return s;
 }
 // ---- display settings panel (button at the bottom of the sidebar) ----
